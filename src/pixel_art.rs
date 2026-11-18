@@ -2,10 +2,11 @@ use eframe::egui;
 
 use crate::fractales::{
     arbol_pitagoras::ArbolPitagoras,
+    arbol_pitagoras_paralelo::ArbolPitagorasParalelo,
     copo_koch::CopoKoch,
-    romanesco::Romanesco,
-    apolonio::Apolonio,
+    copo_koch_paralelo::CopoKochParalelo,
     dragon::Dragon,
+    romanesco::Romanesco,
     Fractal,
 };
 
@@ -25,55 +26,82 @@ impl MyPixelArt {
     }
 }
 
+fn menu_principal(ui: &mut egui::Ui, seleccion: &mut Option<Box<dyn Fractal>>) {
+    let ancho_ventana = ui.available_width();
+    let ancho_boton = (ancho_ventana * 0.6).clamp(400.0, 900.0);
+    let alto_boton = 56.0;
+
+    let botones: [(&str, fn() -> Box<dyn Fractal>); 6] = [
+        (" Árbol de Pitágoras", || Box::new(ArbolPitagoras::default())),
+        (" Árbol de Pitágoras (Paralelo)", || Box::new(ArbolPitagorasParalelo::default())),
+        (" Copo de Koch", || Box::new(CopoKoch::default())),
+        (" Copo de Koch (Paralelo)", || Box::new(CopoKochParalelo::default())),
+        (" Curva del Dragón", || Box::new(Dragon::default())),
+        (" Brócoli Romanesco", || Box::new(Romanesco::default())),
+    ];
+
+    let alto_contenido = botones.len() as f32 * (alto_boton + 12.0) + 120.0;
+    let espacio_arriba = ((ui.available_height() - alto_contenido) / 2.0).max(20.0);
+
+    ui.vertical_centered(|ui| {
+        ui.add_space(espacio_arriba);
+        ui.heading(
+            egui::RichText::new("Seleccione la animación")
+                .size(32.0)
+                .strong(),
+        );
+        ui.add_space(30.0);
+
+        for (texto, constructor) in botones {
+            let boton = egui::Button::new(egui::RichText::new(texto).size(20.0))
+                .min_size(egui::vec2(ancho_boton, alto_boton))
+                .fill(ui.visuals().widgets.inactive.bg_fill);
+
+            if ui.add(boton).clicked() {
+                *seleccion = Some(constructor());
+            }
+            ui.add_space(12.0);
+        }
+    });
+}
+
+fn vista_fractal(ui: &mut egui::Ui, fractal: &mut Box<dyn Fractal>) -> bool {
+    let mut volver = false;
+
+    egui::Panel::top("controles").show_inside(ui, |ui| {
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui
+                .add(
+                    egui::Button::new(egui::RichText::new("← Volver").size(18.0))
+                        .min_size(egui::vec2(120.0, 40.0)),
+                )
+                .clicked()
+            {
+                volver = true;
+            }
+            ui.separator();
+            ui.heading(egui::RichText::new(fractal.nombre()).size(24.0));
+        });
+        ui.separator();
+        fractal.ui_controles(ui);
+        ui.add_space(6.0);
+    });
+
+    egui::CentralPanel::default().show_inside(ui, |ui| {
+        let rect = ui.available_rect_before_wrap();
+        fractal.dibujar(ui, rect);
+    });
+
+    volver
+}
+
 impl eframe::App for MyPixelArt {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         match &mut self.fractal {
-            None => {
-                egui::CentralPanel::default().show_inside(ui, |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(100.0);
-                        ui.heading("Seleccione la animación");
-                        ui.add_space(30.0);
-
-                        if ui.button("🌳 Árbol de Pitágoras").clicked() {
-                            self.fractal = Some(Box::new(ArbolPitagoras::default()));
-                        }
-                        ui.add_space(10.0);
-                        if ui.button("❄️ Copo de Koch").clicked() {
-                            self.fractal = Some(Box::new(CopoKoch::default()));
-                        }
-                        ui.add_space(10.0);
-                        if ui.button("🥦 Brócoli Romanesco").clicked() {
-                            self.fractal = Some(Box::new(Romanesco::default()));
-                        }
-                        ui.add_space(10.0);
-                        if ui.button("⭕ Tamiz de Apolonio").clicked() {
-                            self.fractal = Some(Box::new(Apolonio::default()));
-                        }
-                        ui.add_space(10.0);
-                        if ui.button("🐉 Curva del Dragón").clicked() {
-                            self.fractal = Some(Box::new(Dragon::default()));
-                        }
-                    });
-                });
-            }
+            None => menu_principal(ui, &mut self.fractal),
             Some(fractal) => {
-                let mut volver = false;
-                egui::Panel::top("controles").show_inside(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        if ui.button("← Volver").clicked() {
-                            volver = true;
-                        }
-                        ui.separator();
-                        ui.heading(fractal.nombre());
-                    });
-                    ui.separator();
-                    fractal.ui_controles(ui);
-                });
-                egui::CentralPanel::default().show_inside(ui, |ui| {
-                    let rect = ui.available_rect_before_wrap();
-                    fractal.dibujar(ui, rect);
-                });
+                let volver = vista_fractal(ui, fractal);
                 if volver {
                     self.fractal = None;
                 }

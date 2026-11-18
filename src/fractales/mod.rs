@@ -1,7 +1,8 @@
 pub mod arbol_pitagoras;
+pub mod arbol_pitagoras_paralelo;
 pub mod copo_koch;
+pub mod copo_koch_paralelo;
 pub mod romanesco;
-pub mod apolonio;   // <-- NUEVO
 pub mod dragon;     // <-- NUEVO
 
 use eframe::egui;

@@ -104,7 +104,7 @@ impl Fractal for ArbolPitagoras {
     fn ui_controles(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Profundidad:");
-            ui.add(egui::Slider::new(&mut self.profundidad, 1..=50));
+            ui.add(egui::Slider::new(&mut self.profundidad, 1..=30));
             ui.label("Velocidad:");
             ui.add(egui::Slider::new(&mut self.nodos_por_segundo, 10.0..=2000.0));
             if ui.button("Repetir animación").clicked() {
