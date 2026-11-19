@@ -1,4 +1,6 @@
+mod animacion;
 mod camara;
+mod dibujo;
 mod fractales;
 mod pixel_art;
 

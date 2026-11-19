@@ -1,14 +1,19 @@
-use eframe::egui;
 use super::Fractal;
+use crate::animacion::Animacion;
 use crate::camara::Camara;
+use crate::dibujo;
+use eframe::egui::{self, Pos2, Stroke};
+
+/// Longitud de cada segmento en unidades del mundo.
+const PASO_MUNDO: f32 = 4.0;
 
 pub struct Dragon {
     pub profundidad: u32,
     pub camara: Camara,
-    pub animando: bool,
-    pub tiempo_inicio: f64,
-    pub segmentos_por_segundo: f32,
-    pub total_segmentos: u32,
+    anim: Animacion,
+    /// Vértices de la curva en coordenadas del mundo (se calcula una sola vez).
+    puntos: Vec<Pos2>,
+    firma: Option<u32>,
 }
 
 impl Default for Dragon {
@@ -16,129 +21,88 @@ impl Default for Dragon {
         Self {
             profundidad: 12,
             camara: Camara::default(),
-            animando: true,
-            tiempo_inicio: 0.0,
-            segmentos_por_segundo: 200.0,
-            total_segmentos: 0,
+            anim: Animacion::new(200.0),
+            puntos: Vec::new(),
+            firma: None,
         }
     }
 }
 
 impl Dragon {
-    fn secuencia_giros(n: u32) -> Vec<i8> {
-        let mut seq = vec![1i8];
-        for _ in 1..n {
-            let mut inv: Vec<i8> = seq.iter().rev().map(|&x| -x).collect();
-            let mut resultado = seq.clone();
-            resultado.push(1);
-            resultado.append(&mut inv);
-            seq = resultado;
-        }
-        seq
-    }
+    fn generar(&mut self) {
+        let n = 1usize << self.profundidad; // segmentos
+        self.puntos.clear();
+        self.puntos.reserve(n + 1);
 
-    fn dibujar_hasta(
-        painter: &egui::Painter,
-        inicio: egui::Pos2,
-        paso: f32,
-        secuencia: &[i8],
-        objetivo: usize,
-    ) -> bool {
-        let mut pos = inicio;
-        let mut angulo = -std::f32::consts::FRAC_PI_2;
+        let mut p = egui::pos2(-100.0, 50.0);
+        let mut dir = egui::vec2(0.0, -PASO_MUNDO);
+        self.puntos.push(p);
+        p += dir;
+        self.puntos.push(p);
 
-        let mut dibujados = 0;
-        if objetivo > 0 {
-            let dir = egui::vec2(angulo.cos(), angulo.sin());
-            let fin = pos + dir * paso;
-            painter.line_segment(
-                [pos, fin],
-                egui::Stroke::new(1.5_f32, egui::Color32::from_rgb(255, 200, 100)),
-            );
-            pos = fin;
-            dibujados += 1;
-        } else {
-            return false;
-        }
-
-        for &giro in secuencia {
-            if dibujados >= objetivo { return false; }
-            let delta = if giro > 0 {
-                std::f32::consts::FRAC_PI_2
+        for k in 1..n {
+            // Secuencia de plegado de papel: sin Vec auxiliar ni trigonometría.
+            let positivo = (((k & k.wrapping_neg()) << 1) & k) == 0;
+            dir = if positivo {
+                egui::vec2(-dir.y, dir.x) // +90°
             } else {
-                -std::f32::consts::FRAC_PI_2
+                egui::vec2(dir.y, -dir.x) // -90°
             };
-            angulo += delta;
-
-            let dir = egui::vec2(angulo.cos(), angulo.sin());
-            let fin = pos + dir * paso;
-            painter.line_segment(
-                [pos, fin],
-                egui::Stroke::new(1.5_f32, egui::Color32::from_rgb(255, 200, 100)),
-            );
-            pos = fin;
-            dibujados += 1;
+            p += dir;
+            self.puntos.push(p);
         }
-        true
+        self.firma = Some(self.profundidad);
     }
 }
 
 impl Fractal for Dragon {
-    fn nombre(&self) -> &'static str { "Curva del Dragón" }
+    fn nombre(&self) -> &'static str {
+        "Curva del Dragón"
+    }
 
     fn ui_controles(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Profundidad:");
             if ui.add(egui::Slider::new(&mut self.profundidad, 1..=16)).changed() {
-                self.total_segmentos = 0;
-                self.animando = true;
-                let t = ui.input(|i| i.time);
-                self.tiempo_inicio = t;
+                self.anim.reiniciar();
             }
             ui.label("Velocidad:");
-            ui.add(egui::Slider::new(&mut self.segmentos_por_segundo, 50.0..=2000.0));
+            ui.add(egui::Slider::new(&mut self.anim.velocidad, 50.0..=20000.0).logarithmic(true));
             if ui.button("Repetir animación").clicked() {
-                self.animando = true;
-                let t = ui.input(|i| i.time);
-                self.tiempo_inicio = t;
+                self.anim.reiniciar();
             }
-            if ui.button("Reset zoom").clicked() { self.camara.reset(); }
+            if ui.button("Reset zoom").clicked() {
+                self.camara.reset();
+            }
         });
     }
 
     fn dibujar(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         let centro = rect.center();
-        self.camara.procesar_zoom(ui, centro);
-        self.camara.procesar_pan(ui);
+        self.camara.interactuar(ui, rect);
 
-        let secuencia = Self::secuencia_giros(self.profundidad);
-        let total = secuencia.len() + 1;
-
-        if self.total_segmentos != total as u32 {
-            self.total_segmentos = total as u32;
+        if self.firma != Some(self.profundidad) {
+            self.generar();
         }
 
-        let objetivo = if self.animando {
-            let ahora = ui.input(|i| i.time);
-            let n = ((ahora - self.tiempo_inicio) as f32 * self.segmentos_por_segundo) as usize;
-            if n >= total {
-                self.animando = false;
-                usize::MAX
-            } else {
-                ui.ctx().request_repaint();
-                n
-            }
-        } else {
-            usize::MAX
-        };
+        let total = self.puntos.len() - 1;
+        let n = self.anim.progreso(ui, total);
+        if n == 0 {
+            return;
+        }
 
-        let paso = 4.0_f32 * self.camara.zoom;
-        let inicio = egui::pos2(
-            centro.x + self.camara.offset.x - 100.0 * self.camara.zoom,
-            centro.y + self.camara.offset.y + 50.0 * self.camara.zoom,
+        // LOD: si los segmentos miden < 1 px, salta puntos.
+        let largo_px = (PASO_MUNDO * self.camara.zoom).max(1e-6);
+        let paso = ((1.0 / largo_px).ceil() as usize).clamp(1, total.max(1));
+
+        let painter = ui.painter_at(rect);
+        dibujo::polilinea(
+            &painter,
+            &self.camara,
+            centro,
+            &self.puntos[..=n],
+            paso,
+            Stroke::new(1.5, egui::Color32::from_rgb(255, 200, 100)),
         );
-
-        let painter = ui.painter();
-        Self::dibujar_hasta(painter, inicio, paso, &secuencia, objetivo);
     }
 }

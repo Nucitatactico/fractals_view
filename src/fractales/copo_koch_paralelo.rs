@@ -1,139 +1,94 @@
-use eframe::egui;
-use super::Fractal;
+use super::{koch_puntos, triangulo_koch, Fractal, LADO_TRIANGULO_KOCH};
+use crate::animacion::Animacion;
 use crate::camara::Camara;
+use crate::dibujo;
+use eframe::egui::{self, Pos2, Stroke};
 use rayon::prelude::*;
-use std::thread;
+use std::time::Instant;
 
-#[derive(Clone, Copy)]
-pub struct Segmento {
-    a: egui::Pos2,
-    b: egui::Pos2,
-    color: egui::Color32,
-    grosor: f32,
-    hilo: u8,
-    tiempo_nacimiento: f32,
+/// Por debajo de este nivel restante se calcula en secuencial
+/// (paralelizar tareas diminutas cuesta más que el trabajo útil).
+const UMBRAL_PARALELO: u32 = 6;
+
+/// Rellena `out` (longitud exacta 4^prof) con el punto de inicio de cada segmento hoja.
+/// Sin Vec intermedios: cada tarea escribe directo en su porción del slice.
+fn rellenar(a: Pos2, b: Pos2, prof: u32, out: &mut [Pos2]) {
+    if prof == 0 {
+        out[0] = a;
+        return;
+    }
+    let (p1, p2, p3) = koch_puntos(a, b);
+    let tareas = [(a, p1), (p1, p2), (p2, p3), (p3, b)];
+    let q = out.len() / 4;
+
+    if prof > UMBRAL_PARALELO {
+        out.par_chunks_mut(q)
+            .zip(tareas.as_slice().par_iter())
+            .for_each(|(trozo, &(s, e))| rellenar(s, e, prof - 1, trozo));
+    } else {
+        for (trozo, &(s, e)) in out.chunks_mut(q).zip(tareas.iter()) {
+            rellenar(s, e, prof - 1, trozo);
+        }
+    }
+}
+
+fn color_hilo(hilo: usize, prof: u32) -> egui::Color32 {
+    let base_hue = match hilo {
+        0 => 0.55, // cian
+        1 => 0.05, // naranja
+        _ => 0.30, // verde
+    };
+    let hue = (base_hue + prof as f32 * 0.02).rem_euclid(1.0);
+    let val = 0.9 - (prof as f32 * 0.02).min(0.3);
+    egui::Color32::from(egui::ecolor::Hsva::new(hue, 0.8, val, 1.0))
 }
 
 pub struct CopoKochParalelo {
     pub profundidad: u32,
     pub camara: Camara,
-    pub animando: bool,
-    pub tiempo_inicio: f64,
-    pub segmentos_por_segundo: f32,
-    pub geometria: Vec<Segmento>,
-    pub firma_geometria: Option<u32>,
+    anim: Animacion,
+    /// Un contorno por lado del triángulo (cada uno con 4^prof + 1 puntos).
+    lados: [Vec<Pos2>; 3],
+    firma: Option<u32>,
+    ms_generacion: f32,
 }
 
 impl Default for CopoKochParalelo {
     fn default() -> Self {
-        let mut app = Self {
+        Self {
             profundidad: 5,
             camara: Camara::default(),
-            animando: true,
-            tiempo_inicio: 0.0,
-            segmentos_por_segundo: 200.0,
-            geometria: Vec::new(),
-            firma_geometria: None,
-        };
-        app.generar_geometria();
-        app
+            anim: Animacion::new(200.0),
+            lados: Default::default(),
+            firma: None,
+            ms_generacion: 0.0,
+        }
     }
 }
 
 impl CopoKochParalelo {
-    fn generar_geometria(&mut self) {
-        self.geometria.clear();
-        let tamano = 200.0_f32;
-        let radio = tamano / 3.0_f32.sqrt();
-
-        let v0 = egui::pos2(0.0, -radio);
-        let v1 = egui::pos2(radio * 1.5_f32.sqrt(), radio * 0.5);
-        let v2 = egui::pos2(-radio * 1.5_f32.sqrt(), radio * 0.5);
-
+    fn generar(&mut self) {
+        let t0 = Instant::now();
+        let vertices = triangulo_koch();
         let prof = self.profundidad;
+        let n = 4usize.pow(prof);
 
-        let estimado = 3usize.saturating_mul(4usize.saturating_pow(prof));
-        self.geometria.reserve(estimado);
+        // Un lado por tarea de rayon; dentro de cada lado, `rellenar` se subdivide en paralelo.
+        self.lados[..]
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, v)| {
+                let a = vertices[i];
+                let b = vertices[(i + 1) % 3];
+                v.clear();
+                v.resize(n + 1, Pos2::ZERO);
+                let (cuerpo, cola) = v.split_at_mut(n);
+                rellenar(a, b, prof, cuerpo);
+                cola[0] = b;
+            });
 
-        // Tres hilos, uno por lado del triángulo.
-        let (lado0, lado1, lado2) = thread::scope(|s| {
-            let h0 = s.spawn(|| Self::calcular_lado(v0, v1, prof, prof, 0));
-            let h1 = s.spawn(|| Self::calcular_lado(v1, v2, prof, prof, 1));
-            let h2 = s.spawn(|| Self::calcular_lado(v2, v0, prof, prof, 2));
-            (h0.join().unwrap(), h1.join().unwrap(), h2.join().unwrap())
-        });
-
-        self.geometria.extend(lado0);
-        self.geometria.extend(lado1);
-        self.geometria.extend(lado2);
-
-        self.firma_geometria = Some(self.profundidad);
-    }
-
-    fn calcular_lado(
-        a: egui::Pos2,
-        b: egui::Pos2,
-        prof_actual: u32,
-        prof_max: u32,
-        hilo: u8,
-    ) -> Vec<Segmento> {
-        // Color base según hilo, con variación de tono por profundidad.
-        let base_hue = match hilo {
-            0 => 0.55, // cian
-            1 => 0.05, // naranja
-            _ => 0.30, // verde
-        };
-        let prof_desde_raiz = prof_max - prof_actual;
-        let hue = (base_hue + prof_desde_raiz as f32 * 0.02).rem_euclid(1.0);
-        let sat = 0.8;
-        let val = 0.9 - (prof_desde_raiz as f32 * 0.02).min(0.3);
-        let color = egui::Color32::from(egui::ecolor::Hsva::new(hue, sat, val, 1.0));
-        let grosor = (2.0 / (prof_desde_raiz as f32 + 1.0)).max(0.5);
-
-        // Caso base: segmento hoja.
-        if prof_actual == 0 {
-            return vec![Segmento {
-                a,
-                b,
-                color,
-                grosor,
-                hilo,
-                tiempo_nacimiento: 0.0,
-            }];
-        }
-
-        // Subdividir.
-        let v = b - a;
-        let p1 = a + v / 3.0;
-        let p3 = a + v * (2.0 / 3.0);
-
-        let angulo = std::f32::consts::FRAC_PI_3;
-        let (sin, cos) = angulo.sin_cos();
-        let v_tercio = v / 3.0;
-        let rotado = egui::vec2(
-            v_tercio.x * cos - v_tercio.y * sin,
-            v_tercio.x * sin + v_tercio.y * cos,
-        );
-        let p2 = p1 + rotado;
-
-        let subtareas = [(a, p1), (p1, p2), (p2, p3), (p3, b)];
-
-        let hijos: Vec<Vec<Segmento>> = subtareas
-            .par_iter()
-            .map(|&(sa, sb)| Self::calcular_lado(sa, sb, prof_actual - 1, prof_max, hilo))
-            .collect();
-
-        let mut resultado: Vec<Segmento> = Vec::new();
-        for sub in hijos {
-            resultado.extend(sub);
-        }
-
-        let dt = 1.0_f32;
-        for (i, seg) in resultado.iter_mut().enumerate() {
-            seg.tiempo_nacimiento = i as f32 * dt;
-        }
-
-        resultado
+        self.firma = Some(prof);
+        self.ms_generacion = t0.elapsed().as_secs_f32() * 1000.0;
     }
 }
 
@@ -145,79 +100,55 @@ impl Fractal for CopoKochParalelo {
     fn ui_controles(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Profundidad:");
-            if ui
-                .add(egui::Slider::new(&mut self.profundidad, 1..=12))
-                .changed()
-            {
-                self.firma_geometria = None;
-                self.animando = true;
-                self.tiempo_inicio = ui.input(|i| i.time);
+            if ui.add(egui::Slider::new(&mut self.profundidad, 1..=10)).changed() {
+                self.anim.reiniciar();
             }
-            ui.label("Velocidad:");
-            ui.add(egui::Slider::new(&mut self.segmentos_por_segundo, 50.0..=5000.0));
+            ui.label("Velocidad (por hilo):");
+            ui.add(egui::Slider::new(&mut self.anim.velocidad, 50.0..=50000.0).logarithmic(true));
             if ui.button("Repetir animación").clicked() {
-                self.animando = true;
-                self.tiempo_inicio = ui.input(|i| i.time);
+                self.anim.reiniciar();
             }
             if ui.button("Reset zoom").clicked() {
                 self.camara.reset();
             }
-            ui.label(format!("Segmentos: {}", self.geometria.len()));
+            ui.label(format!(
+                "Segmentos: {} | Generación: {:.1} ms",
+                3 * 4usize.pow(self.profundidad),
+                self.ms_generacion
+            ));
         });
     }
 
     fn dibujar(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         let centro = rect.center();
-        self.camara.procesar_zoom(ui, centro);
-        self.camara.procesar_pan(ui);
+        self.camara.interactuar(ui, rect);
 
-        if self.firma_geometria != Some(self.profundidad) {
-            self.generar_geometria();
+        if self.firma != Some(self.profundidad) {
+            self.generar();
         }
 
-        // Reloj global: cuántos segmentos "por hilo" ya deberían estar.
-        let reloj = if self.animando {
-            let ahora = ui.input(|i| i.time);
-            let transcurrido = (ahora - self.tiempo_inicio) as f32;
-            let n = transcurrido * self.segmentos_por_segundo;
-            let total_por_hilo = self.geometria.len() / 3;
-            if n >= total_por_hilo as f32 {
-                self.animando = false;
-                f32::INFINITY
-            } else {
-                ui.ctx().request_repaint();
-                n
-            }
-        } else {
-            f32::INFINITY
-        };
+        // Los 3 "hilos" avanzan a la vez: cada uno revela su propio lado.
+        let total_por_lado = self.lados[0].len() - 1;
+        let n = self.anim.progreso(ui, total_por_lado);
+        if n == 0 {
+            return;
+        }
 
-        let painter = ui.painter();
-        let escala = self.camara.zoom;
-        let ox = centro.x + self.camara.offset.x;
-        let oy = centro.y + self.camara.offset.y;
+        let largo_px =
+            (LADO_TRIANGULO_KOCH / 3f32.powi(self.profundidad as i32) * self.camara.zoom).max(1e-6);
+        let paso = ((1.0 / largo_px).ceil() as usize).clamp(1, total_por_lado.max(1));
+        let grosor = (2.0 / (self.profundidad as f32 + 1.0)).max(0.5);
 
-        for seg in &self.geometria {
-            // Cada hilo tiene su propio reloj ligeramente desfasado para que
-            // se vea que avanzan en paralelo.
-            let desfase_hilo = seg.hilo as f32 * 3.0;
-            if seg.tiempo_nacimiento + desfase_hilo > reloj {
-                continue;
-            }
-
-            let p1 = egui::pos2(ox + seg.a.x * escala, oy + seg.a.y * escala);
-            let p2 = egui::pos2(ox + seg.b.x * escala, oy + seg.b.y * escala);
-
-            // Pequeño "brillo" extra justo cuando el segmento nace, para
-            // enfatizar el trabajo de los hilos.
-            let edad = reloj - (seg.tiempo_nacimiento + desfase_hilo);
-            let grosor = if edad < 5.0 {
-                seg.grosor * 1.5
-            } else {
-                seg.grosor
-            };
-
-            painter.line_segment([p1, p2], egui::Stroke::new(grosor, seg.color));
+        let painter = ui.painter_at(rect);
+        for (hilo, lado) in self.lados.iter().enumerate() {
+            dibujo::polilinea(
+                &painter,
+                &self.camara,
+                centro,
+                &lado[..=n],
+                paso,
+                Stroke::new(grosor, color_hilo(hilo, self.profundidad)),
+            );
         }
     }
 }

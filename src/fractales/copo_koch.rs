@@ -1,14 +1,18 @@
-use eframe::egui;
-use super::Fractal;
+use super::{koch_puntos, triangulo_koch, Fractal, LADO_TRIANGULO_KOCH};
+use crate::animacion::Animacion;
 use crate::camara::Camara;
+use crate::dibujo;
+use eframe::egui::{self, Pos2, Stroke};
+use std::time::Instant;
 
 pub struct CopoKoch {
     pub profundidad: u32,
     pub camara: Camara,
-    pub animando: bool,
-    pub tiempo_inicio: f64,
-    pub segmentos_por_segundo: f32,
-    pub total_segmentos: u32,
+    anim: Animacion,
+    /// Contorno completo del copo (polilínea cerrada) en coordenadas del mundo.
+    puntos: Vec<Pos2>,
+    firma: Option<u32>,
+    ms_generacion: f32,
 }
 
 impl Default for CopoKoch {
@@ -16,136 +20,102 @@ impl Default for CopoKoch {
         Self {
             profundidad: 4,
             camara: Camara::default(),
-            animando: true,
-            tiempo_inicio: 0.0,
-            segmentos_por_segundo: 300.0,
-            total_segmentos: 0,
+            anim: Animacion::new(300.0),
+            puntos: Vec::new(),
+            firma: None,
+            ms_generacion: 0.0,
         }
     }
 }
 
 impl CopoKoch {
-    fn contar_segmentos(profundidad: u32) -> u32 {
-        // 3 lados * 4^profundidad. Con profundidad <= 8 no hay overflow.
-        3 * 4u32.pow(profundidad)
+    /// Versión secuencial clásica: recursión que va empujando puntos al Vec.
+    fn generar_lado(a: Pos2, b: Pos2, prof: u32, out: &mut Vec<Pos2>) {
+        if prof == 0 {
+            out.push(a);
+            return;
+        }
+        let (p1, p2, p3) = koch_puntos(a, b);
+        Self::generar_lado(a, p1, prof - 1, out);
+        Self::generar_lado(p1, p2, prof - 1, out);
+        Self::generar_lado(p2, p3, prof - 1, out);
+        Self::generar_lado(p3, b, prof - 1, out);
     }
 
-    fn dibujar_lado(
-        painter: &egui::Painter,
-        a: egui::Pos2,
-        b: egui::Pos2,
-        profundidad: u32,
-        visitados: &mut u32,
-        objetivo: u32,
-        color: egui::Color32,
-        grosor: f32,
-    ) -> bool {
-        if profundidad == 0 {
-            if *visitados >= objetivo {
-                return false;
-            }
-            *visitados += 1;
-            painter.line_segment([a, b], egui::Stroke::new(grosor, color));
-            return true;
-        }
+    fn generar(&mut self) {
+        let t0 = Instant::now();
+        let [v0, v1, v2] = triangulo_koch();
+        let n = 3 * 4usize.pow(self.profundidad);
 
-        let v = b - a;
-        let p1 = a + v / 3.0;
-        let p3 = a + v * (2.0 / 3.0);
+        self.puntos.clear();
+        self.puntos.reserve(n + 1);
+        Self::generar_lado(v0, v1, self.profundidad, &mut self.puntos);
+        Self::generar_lado(v1, v2, self.profundidad, &mut self.puntos);
+        Self::generar_lado(v2, v0, self.profundidad, &mut self.puntos);
+        self.puntos.push(v0); // cierra el contorno
 
-        let angulo = std::f32::consts::FRAC_PI_3;
-        let (sin, cos) = angulo.sin_cos();
-        let v_tercio = v / 3.0;
-        let rotado = egui::vec2(
-            v_tercio.x * cos - v_tercio.y * sin,
-            v_tercio.x * sin + v_tercio.y * cos,
-        );
-        let p2 = p1 + rotado;
-
-        if !Self::dibujar_lado(painter, a, p1, profundidad - 1, visitados, objetivo, color, grosor) {
-            return false;
-        }
-        if !Self::dibujar_lado(painter, p1, p2, profundidad - 1, visitados, objetivo, color, grosor) {
-            return false;
-        }
-        if !Self::dibujar_lado(painter, p2, p3, profundidad - 1, visitados, objetivo, color, grosor) {
-            return false;
-        }
-        Self::dibujar_lado(painter, p3, b, profundidad - 1, visitados, objetivo, color, grosor)
+        self.firma = Some(self.profundidad);
+        self.ms_generacion = t0.elapsed().as_secs_f32() * 1000.0;
     }
 }
 
 impl Fractal for CopoKoch {
-    fn nombre(&self) -> &'static str { "Copo de Koch" }
+    fn nombre(&self) -> &'static str {
+        "Copo de Koch"
+    }
 
     fn ui_controles(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Profundidad:");
-            ui.add(egui::Slider::new(&mut self.profundidad, 1..=8));
+            if ui.add(egui::Slider::new(&mut self.profundidad, 1..=9)).changed() {
+                self.anim.reiniciar();
+            }
             ui.label("Velocidad:");
-            ui.add(egui::Slider::new(&mut self.segmentos_por_segundo, 50.0..=5000.0));
+            ui.add(egui::Slider::new(&mut self.anim.velocidad, 50.0..=50000.0).logarithmic(true));
             if ui.button("Repetir animación").clicked() {
-                let t = ui.input(|i| i.time);
-                self.animando = true;
-                self.tiempo_inicio = t;
-                self.total_segmentos = 0;
+                self.anim.reiniciar();
             }
             if ui.button("Reset zoom").clicked() {
                 self.camara.reset();
             }
+            ui.label(format!(
+                "Segmentos: {} | Generación: {:.1} ms",
+                self.puntos.len().saturating_sub(1),
+                self.ms_generacion
+            ));
         });
     }
 
     fn dibujar(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         let centro = rect.center();
-        self.camara.procesar_zoom(ui, centro);
-        self.camara.procesar_pan(ui);
+        self.camara.interactuar(ui, rect);
 
-        let tamano_efectivo = 200.0 * self.camara.zoom;
-        let radio = tamano_efectivo / 3.0_f32.sqrt();
-
-        let v0 = egui::pos2(
-            centro.x + self.camara.offset.x,
-            centro.y - radio + self.camara.offset.y,
-        );
-        let v1 = egui::pos2(
-            v0.x + radio * 1.5_f32.sqrt(),
-            v0.y + radio * 0.5,
-        );
-        let v2 = egui::pos2(
-            v0.x - radio * 1.5_f32.sqrt(),
-            v0.y + radio * 0.5,
-        );
-
-        if self.total_segmentos == 0 {
-            self.total_segmentos = Self::contar_segmentos(self.profundidad);
+        if self.firma != Some(self.profundidad) {
+            self.generar();
         }
 
-        let objetivo = if self.animando {
-            let ahora = ui.input(|i| i.time);
-            let n = ((ahora - self.tiempo_inicio) as f32 * self.segmentos_por_segundo) as u32;
-            if n >= self.total_segmentos {
-                self.animando = false;
-                u32::MAX
-            } else {
-                ui.ctx().request_repaint();
-                n
-            }
-        } else {
-            u32::MAX
-        };
+        let total = self.puntos.len() - 1;
+        let n = self.anim.progreso(ui, total);
+        if n == 0 {
+            return;
+        }
+
+        // LOD según el largo en pantalla de un segmento hoja.
+        let largo_px =
+            (LADO_TRIANGULO_KOCH / 3f32.powi(self.profundidad as i32) * self.camara.zoom).max(1e-6);
+        let paso = ((1.0 / largo_px).ceil() as usize).clamp(1, total.max(1));
 
         let grosor = (2.0 / (self.profundidad as f32 + 1.0)).max(0.5);
         let color = egui::Color32::from_rgb(100, 200, 255);
-        let painter = ui.painter();
 
-        let mut visitados = 0u32;
-        if !Self::dibujar_lado(painter, v0, v1, self.profundidad, &mut visitados, objetivo, color, grosor) {
-            return;
-        }
-        if !Self::dibujar_lado(painter, v1, v2, self.profundidad, &mut visitados, objetivo, color, grosor) {
-            return;
-        }
-        Self::dibujar_lado(painter, v2, v0, self.profundidad, &mut visitados, objetivo, color, grosor);
+        let painter = ui.painter_at(rect);
+        dibujo::polilinea(
+            &painter,
+            &self.camara,
+            centro,
+            &self.puntos[..=n],
+            paso,
+            Stroke::new(grosor, color),
+        );
     }
 }

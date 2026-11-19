@@ -2,7 +2,18 @@
 name = "fractal_view"
 version = "0.1.0"
 edition = "2021"
-
+ 
 [dependencies]
 eframe = "0.34"
-rayon="1.10"
+rayon = "1.10"
+ 
+[profile.dev]
+opt-level = 1
+ 
+[profile.dev.package."*"]
+opt-level = 3
+ 
+[profile.release]
+lto = "thin"
+codegen-units = 1
+ 
