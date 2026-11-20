@@ -1,61 +1,76 @@
 use super::arbol_pitagoras::{
-    base_raiz, crear_nodo, generar_rec, A45, ANGULO_INICIAL, LADO_MIN, LADO_RAIZ, R,
+    base_raiz, crear_nodo, dibujar_arbol, generar_rec, Geometria, A45, ANGULO_INICIAL, LADO_MIN,
+    LADO_RAIZ, R,
 };
 use super::Fractal;
 use crate::animacion::Animacion;
 use crate::camara::Camara;
-use crate::dibujo::{self, Cuadrado};
+use crate::dibujo::Cuadrado;
+use crate::hilos;
 use eframe::egui::{self, Pos2};
-use rayon::prelude::*;
-use std::time::Instant;
-
-/// Hasta este nivel se bifurca con `rayon::join`; más abajo, recursión secuencial.
-const NIVEL_SECUENCIAL: u32 = 10;
 
 pub struct ArbolPitagorasParalelo {
     pub profundidad: u32,
+    /// Valor del slider; se aplica al soltarlo (así arrastrar no regenera todo).
+    pedida: u32,
     pub camara: Camara,
-    /// `velocidad` = niveles del árbol que aparecen por segundo.
     anim: Animacion,
-    /// Ordenada por nivel: los cuadrados del nivel k son `geometria[limites[k]..limites[k+1]]`.
-    geometria: Vec<Cuadrado>,
-    limites: Vec<usize>,
+    geom: Geometria,
+    trabajadores: usize,
+    por_hilo: bool,
     firma: Option<u32>,
-    ms_generacion: f32,
 }
 
 impl Default for ArbolPitagorasParalelo {
     fn default() -> Self {
         Self {
             profundidad: 10,
+            pedida: 10,
             camara: Camara::default(),
-            anim: Animacion::new(6.0),
-            geometria: Vec::new(),
-            limites: vec![0],
+            anim: Animacion::new(200.0),
+            geom: Geometria::default(),
+            trabajadores: hilos::trabajadores(),
+            por_hilo: true,
             firma: None,
-            ms_generacion: 0.0,
         }
     }
 }
 
-/// Fork-join real: cada subárbol alto se reparte entre los hilos de rayon.
-fn generar_par(base: Pos2, lado: f32, angulo: f32, nivel: u32, prof_max: u32) -> Vec<Cuadrado> {
+/// Fork-join: mientras al subárbol le queden varios trabajadores, se bifurca con
+/// `rayon::join` y los trabajadores se reparten entre las dos ramas (mitad y mitad).
+/// Cuando queda uno solo, ese hilo termina el subárbol de forma secuencial.
+/// `ini..ini+n` son los trabajadores disponibles; el nodo lo atiende `ini`.
+fn generar_par(
+    base: Pos2,
+    lado: f32,
+    angulo: f32,
+    nivel: u32,
+    prof_max: u32,
+    ini: usize,
+    n: usize,
+) -> Vec<Cuadrado> {
     if nivel >= prof_max || lado < LADO_MIN {
         return Vec::new();
     }
-    if nivel >= NIVEL_SECUENCIAL {
+    if n <= 1 {
         let mut v = Vec::new();
         generar_rec(&mut v, base, lado, angulo, nivel, prof_max);
+        for c in &mut v {
+            c.hilo = ini as u8;
+        }
         return v;
     }
 
-    let nodo = crear_nodo(base, lado, angulo, nivel, prof_max);
+    let mut nodo = crear_nodo(base, lado, angulo, nivel, prof_max);
+    nodo.cuadrado.hilo = ini as u8;
     let l = lado * R;
     let (base_izq, base_der) = (nodo.base_izq, nodo.base_der);
+    let n_izq = (n + 1) / 2;
+    let n_der = n - n_izq;
 
     let (izq, der) = rayon::join(
-        || generar_par(base_izq, l, angulo + A45, nivel + 1, prof_max),
-        || generar_par(base_der, l, angulo - A45, nivel + 1, prof_max),
+        || generar_par(base_izq, l, angulo + A45, nivel + 1, prof_max, ini, n_izq),
+        || generar_par(base_der, l, angulo - A45, nivel + 1, prof_max, ini + n_izq, n_der),
     );
 
     let mut v = Vec::with_capacity(1 + izq.len() + der.len());
@@ -67,33 +82,19 @@ fn generar_par(base: Pos2, lado: f32, angulo: f32, nivel: u32, prof_max: u32) ->
 
 impl ArbolPitagorasParalelo {
     fn generar(&mut self) {
-        let t0 = Instant::now();
-
-        self.geometria = generar_par(
-            base_raiz(self.profundidad),
+        let w = hilos::trabajadores();
+        let v = generar_par(
+            base_raiz(),
             LADO_RAIZ,
             ANGULO_INICIAL,
             0,
             self.profundidad,
+            0,
+            w,
         );
-        // Orden estable por nivel para poder revelar el árbol "por capas".
-        self.geometria.par_sort_by_key(|c| c.nivel);
-
-        let niveles = self
-            .geometria
-            .last()
-            .map(|c| c.nivel as usize + 1)
-            .unwrap_or(0);
-        self.limites = vec![0; niveles + 1];
-        for c in &self.geometria {
-            self.limites[c.nivel as usize + 1] += 1;
-        }
-        for i in 1..=niveles {
-            self.limites[i] += self.limites[i - 1];
-        }
-
+        self.trabajadores = w;
+        self.geom = Geometria::nueva(v, w);
         self.firma = Some(self.profundidad);
-        self.ms_generacion = t0.elapsed().as_secs_f32() * 1000.0;
     }
 }
 
@@ -105,38 +106,39 @@ impl Fractal for ArbolPitagorasParalelo {
     fn ui_controles(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Profundidad:");
-            if ui.add(egui::Slider::new(&mut self.profundidad, 1..=24)).changed() {
+            let r = ui.add(egui::Slider::new(&mut self.pedida, 1..=22));
+            if r.drag_stopped() || (r.changed() && !r.dragged()) {
+                self.profundidad = self.pedida;
                 self.anim.reiniciar();
             }
-            ui.label("Niveles/s:");
-            ui.add(egui::Slider::new(&mut self.anim.velocidad, 1.0..=60.0));
+            ui.label("Velocidad (por hilo):");
+            ui.add(egui::Slider::new(&mut self.anim.velocidad, 10.0..=5000000.0).logarithmic(true));
+            ui.checkbox(&mut self.por_hilo, "Colorear por hilo");
             if ui.button("Repetir animación").clicked() {
                 self.anim.reiniciar();
             }
             if ui.button("Reset zoom").clicked() {
                 self.camara.reset();
             }
-            ui.label(format!(
-                "Nodos: {} | Generación: {:.1} ms",
-                self.geometria.len(),
-                self.ms_generacion
-            ));
         });
     }
 
     fn dibujar(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
-        let centro = rect.center();
         self.camara.interactuar(ui, rect);
 
         if self.firma != Some(self.profundidad) {
             self.generar();
         }
 
-        let niveles = self.limites.len() - 1;
-        let k = self.anim.progreso(ui, niveles);
-        let hasta = self.limites[k];
-
-        let painter = ui.painter_at(rect);
-        dibujo::cuadrados(&painter, &self.camara, centro, rect, &self.geometria[..hasta]);
+        let titulo = format!("Paralelo: {} hilos", self.trabajadores);
+        dibujar_arbol(
+            ui,
+            rect,
+            &self.camara,
+            &mut self.anim,
+            &self.geom,
+            self.por_hilo,
+            &titulo,
+        );
     }
 }

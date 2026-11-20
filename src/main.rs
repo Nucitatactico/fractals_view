@@ -1,13 +1,15 @@
 mod animacion;
 mod camara;
+mod curva;
 mod dibujo;
 mod fractales;
+mod hilos;
 mod pixel_art;
 
 use pixel_art::MyPixelArt;
 
 fn main() -> eframe::Result<()> {
-    let title = String::from("Fractales EDA2");
+    let title = String::from("Fractales");
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([1600.0, 1000.0])

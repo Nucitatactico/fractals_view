@@ -1,18 +1,18 @@
 use super::Fractal;
 use crate::animacion::Animacion;
 use crate::camara::Camara;
-use crate::dibujo;
-use eframe::egui::{self, Pos2, Stroke};
+use crate::curva::Curva;
+use crate::hilos;
+use eframe::egui::{self, Pos2};
 
 /// Longitud de cada segmento en unidades del mundo.
-const PASO_MUNDO: f32 = 4.0;
+pub const PASO_MUNDO: f32 = 4.0;
 
 pub struct Dragon {
     pub profundidad: u32,
     pub camara: Camara,
     anim: Animacion,
-    /// Vértices de la curva en coordenadas del mundo (se calcula una sola vez).
-    puntos: Vec<Pos2>,
+    curva: Curva,
     firma: Option<u32>,
 }
 
@@ -22,26 +22,25 @@ impl Default for Dragon {
             profundidad: 12,
             camara: Camara::default(),
             anim: Animacion::new(200.0),
-            puntos: Vec::new(),
+            curva: Curva::vacia(),
             firma: None,
         }
     }
 }
 
 impl Dragon {
+    /// Secuencial: un único recorrido que gira según la secuencia de plegado de papel.
     fn generar(&mut self) {
         let n = 1usize << self.profundidad; // segmentos
-        self.puntos.clear();
-        self.puntos.reserve(n + 1);
+        let mut puntos: Vec<Pos2> = Vec::with_capacity(n + 1);
 
         let mut p = egui::pos2(-100.0, 50.0);
         let mut dir = egui::vec2(0.0, -PASO_MUNDO);
-        self.puntos.push(p);
+        puntos.push(p);
         p += dir;
-        self.puntos.push(p);
+        puntos.push(p);
 
         for k in 1..n {
-            // Secuencia de plegado de papel: sin Vec auxiliar ni trigonometría.
             let positivo = (((k & k.wrapping_neg()) << 1) & k) == 0;
             dir = if positivo {
                 egui::vec2(-dir.y, dir.x) // +90°
@@ -49,8 +48,10 @@ impl Dragon {
                 egui::vec2(dir.y, -dir.x) // -90°
             };
             p += dir;
-            self.puntos.push(p);
+            puntos.push(p);
         }
+
+        self.curva = Curva::secuencial(puntos);
         self.firma = Some(self.profundidad);
     }
 }
@@ -63,11 +64,11 @@ impl Fractal for Dragon {
     fn ui_controles(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Profundidad:");
-            if ui.add(egui::Slider::new(&mut self.profundidad, 1..=16)).changed() {
+            if ui.add(egui::Slider::new(&mut self.profundidad, 1..=18)).changed() {
                 self.anim.reiniciar();
             }
             ui.label("Velocidad:");
-            ui.add(egui::Slider::new(&mut self.anim.velocidad, 50.0..=20000.0).logarithmic(true));
+            ui.add(egui::Slider::new(&mut self.anim.velocidad, 50.0..=200000.0).logarithmic(true));
             if ui.button("Repetir animación").clicked() {
                 self.anim.reiniciar();
             }
@@ -85,24 +86,24 @@ impl Fractal for Dragon {
             self.generar();
         }
 
-        let total = self.puntos.len() - 1;
+        let total = self.curva.max_trabajo;
         let n = self.anim.progreso(ui, total);
-        if n == 0 {
-            return;
-        }
 
-        // LOD: si los segmentos miden < 1 px, salta puntos.
         let largo_px = (PASO_MUNDO * self.camara.zoom).max(1e-6);
         let paso = ((1.0 / largo_px).ceil() as usize).clamp(1, total.max(1));
+        let color = egui::Color32::from_rgb(255, 200, 100);
 
         let painter = ui.painter_at(rect);
-        dibujo::polilinea(
+        self.curva.dibujar(
             &painter,
             &self.camara,
             centro,
-            &self.puntos[..=n],
+            n,
+            self.anim.animando,
             paso,
-            Stroke::new(1.5, egui::Color32::from_rgb(255, 200, 100)),
+            1.5,
+            |_| color,
         );
+        hilos::panel(&painter, rect, "Secuencial: 1 hilo", &self.curva.filas(n));
     }
 }
