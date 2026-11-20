@@ -6,6 +6,7 @@
 //!   centro cuestan mucho más que las de los bordes).
 
 use super::Fractal;
+use crate::escena::Firma;
 use crate::hilos::{self, FilaHilo};
 use eframe::egui::{self, Color32, ColorImage, Rect, Stroke, TextureHandle, TextureOptions};
 use rayon::prelude::*;
@@ -23,7 +24,7 @@ struct Vista {
 
 /// Todo lo que, si cambia, obliga a recalcular la imagen desde cero.
 #[derive(Clone, Copy, PartialEq)]
-struct Firma {
+struct Config {
     w: usize,
     h: usize,
     vista: Vista,
@@ -131,7 +132,7 @@ pub struct Mandelbrot {
     intercalado: bool,
 
     vista: Option<Vista>,
-    firma: Option<Firma>,
+    firma: Firma<Config>,
     trabajadores: Vec<Trabajador>,
     w: usize,
     h: usize,
@@ -151,7 +152,7 @@ impl Default for Mandelbrot {
             paralelo: false,
             intercalado: false,
             vista: None,
-            firma: None,
+            firma: Firma::default(),
             trabajadores: Vec::new(),
             w: 1,
             h: 1,
@@ -165,21 +166,21 @@ impl Default for Mandelbrot {
 }
 
 impl Mandelbrot {
-    fn reiniciar(&mut self, firma: Firma) {
-        self.w = firma.w;
-        self.h = firma.h;
+    fn reiniciar(&mut self, config: Config) {
+        self.w = config.w;
+        self.h = config.h;
         self.rgba = vec![0u8; self.w * self.h * 4];
         for px in self.rgba.chunks_exact_mut(4) {
             px.copy_from_slice(&[18, 18, 22, 255]);
         }
 
-        let nw = if firma.paralelo { hilos::trabajadores() } else { 1 };
+        let nw = if config.paralelo { hilos::trabajadores() } else { 1 };
         let h = self.h;
         self.trabajadores = (0..nw)
             .map(|k| {
                 let filas: Vec<usize> = if nw == 1 {
                     (0..h).collect()
-                } else if firma.intercalado {
+                } else if config.intercalado {
                     (k..h).step_by(nw).collect()
                 } else {
                     let tam = (h + nw - 1) / nw;
@@ -192,7 +193,6 @@ impl Mandelbrot {
         self.textura = None; // se recrea con el nuevo tamaño
         self.sucio = true;
         self.acabado = false;
-        self.firma = Some(firma);
     }
 
     /// Cada trabajador resuelve hasta `filas_por_frame` filas reales.
@@ -201,7 +201,7 @@ impl Mandelbrot {
         if self.acabado {
             return;
         }
-        let Some(firma) = self.firma else { return };
+        let Some(firma) = self.firma.valor().copied() else { return };
         let p = Params {
             w: self.w,
             h: self.h,
@@ -258,7 +258,7 @@ impl Fractal for Mandelbrot {
                 egui::Checkbox::new(&mut self.intercalado, "Filas intercaladas"),
             );
             if ui.button("Repetir animación").clicked() {
-                self.firma = None;
+                self.firma.invalidar();
             }
             if ui.button("Reset zoom").clicked() {
                 self.vista = None;
@@ -303,7 +303,7 @@ impl Fractal for Mandelbrot {
         let vista = *v;
 
         // Si cambió algo (vista, tamaño, parámetros) se vuelve a empezar.
-        let firma = Firma {
+        let config = Config {
             w,
             h,
             vista,
@@ -312,8 +312,8 @@ impl Fractal for Mandelbrot {
             paralelo: self.paralelo,
             intercalado: self.intercalado,
         };
-        if self.firma != Some(firma) {
-            self.reiniciar(firma);
+        if self.firma.cambiada(config) {
+            self.reiniciar(config);
         }
 
         self.avanzar();

@@ -1,7 +1,6 @@
 use super::Fractal;
-use crate::animacion::Animacion;
-use crate::camara::Camara;
 use crate::dibujo::{self, Cuadrado};
+use crate::escena::Escena;
 use crate::hilos::{self, Reparto};
 use eframe::egui::{self, Color32, Pos2};
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_4, PI};
@@ -148,26 +147,69 @@ pub fn asignar_tiempos(cuadrados: &mut [Cuadrado], trabajadores: usize) -> Repar
     reparto
 }
 
-/// Dibujo común a las dos versiones del árbol (la cámara ya se procesó fuera).
+/// PARALELO (fork-join): mientras al subárbol le queden varios trabajadores se bifurca con
+/// `rayon::join` y los trabajadores se reparten entre las dos ramas (mitad y mitad).
+/// Cuando queda uno solo, ese hilo termina el subárbol de forma secuencial.
+/// `ini..ini+n` son los trabajadores disponibles; el nodo lo atiende `ini`.
+fn generar_par(
+    base: Pos2,
+    lado: f32,
+    angulo: f32,
+    nivel: u32,
+    prof_max: u32,
+    ini: usize,
+    n: usize,
+) -> Vec<Cuadrado> {
+    if nivel >= prof_max || lado < LADO_MIN {
+        return Vec::new();
+    }
+    if n <= 1 {
+        let mut v = Vec::new();
+        generar_rec(&mut v, base, lado, angulo, nivel, prof_max);
+        for c in &mut v {
+            c.hilo = ini as u8;
+        }
+        return v;
+    }
+
+    let mut nodo = crear_nodo(base, lado, angulo, nivel, prof_max);
+    nodo.cuadrado.hilo = ini as u8;
+    let l = lado * R;
+    let (base_izq, base_der) = (nodo.base_izq, nodo.base_der);
+    let n_izq = (n + 1) / 2;
+    let n_der = n - n_izq;
+
+    let (izq, der) = rayon::join(
+        || generar_par(base_izq, l, angulo + A45, nivel + 1, prof_max, ini, n_izq),
+        || generar_par(base_der, l, angulo - A45, nivel + 1, prof_max, ini + n_izq, n_der),
+    );
+
+    let mut v = Vec::with_capacity(1 + izq.len() + der.len());
+    v.push(nodo.cuadrado);
+    v.extend(izq);
+    v.extend(der);
+    v
+}
+
+/// Dibujo del árbol (la cámara ya se procesó en `Escena::preparar`).
 pub fn dibujar_arbol(
     ui: &mut egui::Ui,
     rect: egui::Rect,
-    camara: &Camara,
-    anim: &mut Animacion,
+    escena: &mut Escena,
     geom: &Geometria,
     por_hilo: bool,
     titulo: &str,
 ) {
     let centro = rect.center();
     let total = geom.reparto.total.ceil() as usize;
-    let n = anim.progreso(ui, total);
-    let hasta = if anim.animando { n as f32 } else { f32::INFINITY };
+    let n = escena.avance(ui, total);
+    let hasta = if escena.anim.animando { n as f32 } else { f32::INFINITY };
 
     let paleta: Vec<Color32> = (0..geom.reparto.tiempos.len()).map(hilos::color_hilo).collect();
     let painter = ui.painter_at(rect);
     dibujo::cuadrados(
         &painter,
-        camara,
+        &escena.camara,
         centro,
         rect,
         &geom.cuadrados,
@@ -178,30 +220,26 @@ pub fn dibujar_arbol(
 }
 
 pub struct ArbolPitagoras {
-    pub profundidad: u32,
-    /// Valor del slider; se aplica al soltarlo (así arrastrar no regenera todo).
-    pedida: u32,
-    pub camara: Camara,
-    anim: Animacion,
+    escena: Escena,
+    paralelo: bool,
+    por_hilo: bool,
     geom: Geometria,
-    firma: Option<u32>,
 }
 
 impl Default for ArbolPitagoras {
     fn default() -> Self {
         Self {
-            profundidad: 10,
-            pedida: 10,
-            camara: Camara::default(),
-            anim: Animacion::new(200.0),
+            escena: Escena::new(10, 200.0),
+            paralelo: false,
+            por_hilo: true,
             geom: Geometria::default(),
-            firma: None,
         }
     }
 }
 
 impl ArbolPitagoras {
-    fn generar(&mut self) {
+    /// SECUENCIAL: una sola recursión en preorden.
+    fn generar_secuencial(&mut self) {
         let mut v = Vec::new();
         generar_rec(
             &mut v,
@@ -209,10 +247,23 @@ impl ArbolPitagoras {
             LADO_RAIZ,
             ANGULO_INICIAL,
             0,
-            self.profundidad,
+            self.escena.profundidad,
         );
         self.geom = Geometria::nueva(v, 1);
-        self.firma = Some(self.profundidad);
+    }
+
+    fn generar_paralelo(&mut self) {
+        let w = hilos::trabajadores();
+        let v = generar_par(
+            base_raiz(),
+            LADO_RAIZ,
+            ANGULO_INICIAL,
+            0,
+            self.escena.profundidad,
+            0,
+            w,
+        );
+        self.geom = Geometria::nueva(v, w);
     }
 }
 
@@ -222,39 +273,33 @@ impl Fractal for ArbolPitagoras {
     }
 
     fn ui_controles(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Profundidad:");
-            let r = ui.add(egui::Slider::new(&mut self.pedida, 1..=22));
-            if r.drag_stopped() || (r.changed() && !r.dragged()) {
-                self.profundidad = self.pedida;
-                self.anim.reiniciar();
-            }
-            ui.label("Velocidad:");
-            ui.add(egui::Slider::new(&mut self.anim.velocidad, 10.0..=5000000.0).logarithmic(true));
-            if ui.button("Repetir animación").clicked() {
-                self.anim.reiniciar();
-            }
-            if ui.button("Reset zoom").clicked() {
-                self.camara.reset();
-            }
+        let por_hilo = &mut self.por_hilo;
+        self.escena.controles(ui, 22, &mut self.paralelo, |ui, paralelo| {
+            ui.add_enabled(paralelo, egui::Checkbox::new(por_hilo, "Colorear por hilo"));
         });
     }
 
     fn dibujar(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
-        self.camara.interactuar(ui, rect);
-
-        if self.firma != Some(self.profundidad) {
-            self.generar();
+        if self.escena.preparar(ui, rect, self.paralelo) {
+            if self.paralelo {
+                self.generar_paralelo();
+            } else {
+                self.generar_secuencial();
+            }
         }
 
+        let titulo = if self.paralelo {
+            format!("Paralelo: {} hilos", self.geom.reparto.tiempos.len())
+        } else {
+            "Secuencial: 1 hilo".to_string()
+        };
         dibujar_arbol(
             ui,
             rect,
-            &self.camara,
-            &mut self.anim,
+            &mut self.escena,
             &self.geom,
-            false,
-            "Secuencial: 1 hilo",
+            self.paralelo && self.por_hilo,
+            &titulo,
         );
     }
 }

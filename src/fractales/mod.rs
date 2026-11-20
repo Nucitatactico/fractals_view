@@ -1,12 +1,8 @@
 pub mod arbol_pitagoras;
-pub mod arbol_pitagoras_paralelo;
 pub mod copo_koch;
-pub mod copo_koch_paralelo;
 pub mod dragon;
-pub mod dragon_paralelo;
 pub mod mandelbrot;
 pub mod romanesco;
-pub mod romanesco_paralelo;
 
 use eframe::egui;
 
@@ -20,6 +16,10 @@ pub trait Fractal {
 
 pub const LADO_TRIANGULO_KOCH: f32 = 200.0;
 
+/// El pico de Koch es una rotación de 60° del tercio central:
+/// cos(60°) = 0.5 y sen(60°) = √3/2. El signo NEGATIVO del seno pone el pico hacia
+/// AFUERA con el recorrido v0 -> v1 -> v2 (Y hacia abajo en pantalla); con signo
+/// positivo el pico queda hacia adentro.
 /// Son constantes para no llamar a `sin_cos` millones de veces en profundidades altas.
 const COS_KOCH: f32 = 0.5;
 const SEN_KOCH: f32 = -0.866_025_4;

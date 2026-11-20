@@ -2,14 +2,10 @@ use eframe::egui;
 
 use crate::fractales::{
     arbol_pitagoras::ArbolPitagoras,
-    arbol_pitagoras_paralelo::ArbolPitagorasParalelo,
     copo_koch::CopoKoch,
-    copo_koch_paralelo::CopoKochParalelo,
     dragon::Dragon,
-    dragon_paralelo::DragonParalelo,
     mandelbrot::Mandelbrot,
     romanesco::Romanesco,
-    romanesco_paralelo::RomanescoParalelo,
     Fractal,
 };
 
@@ -32,18 +28,14 @@ impl MyPixelArt {
 fn menu_principal(ui: &mut egui::Ui, seleccion: &mut Option<Box<dyn Fractal>>) {
     let ancho_ventana = ui.available_width();
     let ancho_boton = (ancho_ventana * 0.6).clamp(400.0, 900.0);
-    let alto_boton = 44.0;
-    let separacion = 8.0;
+    let alto_boton = 56.0;
+    let separacion = 12.0;
 
-    let botones: [(&str, fn() -> Box<dyn Fractal>); 9] = [
+    let botones: [(&str, fn() -> Box<dyn Fractal>); 5] = [
         (" Árbol de Pitágoras", || Box::new(ArbolPitagoras::default())),
-        (" Árbol de Pitágoras (Paralelo)", || Box::new(ArbolPitagorasParalelo::default())),
         (" Copo de Koch", || Box::new(CopoKoch::default())),
-        (" Copo de Koch (Paralelo)", || Box::new(CopoKochParalelo::default())),
         (" Curva del Dragón", || Box::new(Dragon::default())),
-        (" Curva del Dragón (Paralelo)", || Box::new(DragonParalelo::default())),
         (" Brócoli Romanesco", || Box::new(Romanesco::default())),
-        (" Brócoli Romanesco (Paralelo)", || Box::new(RomanescoParalelo::default())),
         (" Conjunto de Mandelbrot", || Box::new(Mandelbrot::default())),
     ];
 

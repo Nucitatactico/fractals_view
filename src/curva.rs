@@ -3,8 +3,9 @@
 
 use crate::camara::Camara;
 use crate::dibujo;
-use crate::hilos::FilaHilo;
-use eframe::egui::{Color32, Painter, Pos2, Stroke};
+use crate::escena::Escena;
+use crate::hilos::{self, FilaHilo};
+use eframe::egui::{self, Color32, Painter, Pos2, Stroke};
 
 struct Tramo {
     ini: usize,
@@ -58,7 +59,7 @@ impl Curva {
 
     /// `n` = segmentos que ya dibujó cada trabajador. Mientras un trabajador sigue
     /// dibujando se marca su posición actual con un punto del color de su hilo.
-    pub fn dibujar(
+    fn dibujar(
         &self,
         painter: &Painter,
         camara: &Camara,
@@ -90,6 +91,44 @@ impl Curva {
                 painter.circle_filled(cabeza, 3.5, c);
             }
         }
+    }
+
+    /// Avanza la animación y dibuja la curva con su panel de hilos.
+    /// `largo_hoja` = longitud (en unidades del mundo) de un segmento hoja, para el nivel de detalle.
+    pub fn mostrar(
+        &self,
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        escena: &mut Escena,
+        largo_hoja: f32,
+        grosor: f32,
+        color_secuencial: Color32,
+        paralelo: bool,
+    ) {
+        let n = escena.avance(ui, self.max_trabajo);
+        let largo_px = (largo_hoja * escena.camara.zoom).max(1e-6);
+        let paso = ((1.0 / largo_px).ceil() as usize).clamp(1, self.max_trabajo.max(1));
+        let centro = rect.center();
+        let painter = ui.painter_at(rect);
+
+        if paralelo {
+            self.dibujar(
+                &painter, &escena.camara, centro, n, escena.anim.animando, paso, grosor,
+                hilos::color_hilo,
+            );
+        } else {
+            self.dibujar(
+                &painter, &escena.camara, centro, n, escena.anim.animando, paso, grosor,
+                |_| color_secuencial,
+            );
+        }
+
+        let titulo = if paralelo {
+            format!("Paralelo: {} hilos", self.trabajo.len())
+        } else {
+            "Secuencial: 1 hilo".to_string()
+        };
+        hilos::panel(&painter, rect, &titulo, &self.filas(n));
     }
 
     pub fn filas(&self, n: usize) -> Vec<FilaHilo> {

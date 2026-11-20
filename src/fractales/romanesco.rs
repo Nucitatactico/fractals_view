@@ -1,9 +1,9 @@
 use super::Fractal;
-use crate::animacion::Animacion;
-use crate::camara::Camara;
 use crate::dibujo::{self, Lote};
+use crate::escena::Escena;
 use crate::hilos::{self, Reparto};
 use eframe::egui::{self, Color32, Pos2};
+use rayon::prelude::*;
 
 /// Tamaño del romanesco en unidades del mundo (pensado para una ventana de ~1000 px de alto).
 pub const RADIO_BASE: f32 = 370.0;
@@ -98,12 +98,11 @@ pub fn expandir(out: &mut Vec<Bulto>, b: Bulto, profundidad: u32) {
     }
 }
 
-/// Dibujo común a las dos versiones (la cámara ya se procesó fuera).
+/// Dibujo de los bultos (la cámara ya se procesó en `Escena::preparar`).
 pub fn dibujar_bultos(
     ui: &mut egui::Ui,
     rect: egui::Rect,
-    camara: &Camara,
-    anim: &mut Animacion,
+    escena: &mut Escena,
     bultos: &[Bulto],
     reparto: &Reparto,
     por_hilo: bool,
@@ -111,11 +110,11 @@ pub fn dibujar_bultos(
 ) {
     let centro = rect.center();
     let total = reparto.total.ceil() as usize;
-    let n = anim.progreso(ui, total);
-    let hasta = if anim.animando { n as f32 } else { f32::INFINITY };
+    let n = escena.avance(ui, total);
+    let hasta = if escena.anim.animando { n as f32 } else { f32::INFINITY };
 
-    let origen = camara.origen(centro);
-    let z = camara.zoom;
+    let origen = escena.camara.origen(centro);
+    let z = escena.camara.zoom;
     let paleta: Vec<Color32> = (0..reparto.tiempos.len()).map(hilos::color_hilo).collect();
     let borde = Color32::from_rgb(20, 60, 20);
 
@@ -158,35 +157,34 @@ pub fn dibujar_bultos(
 }
 
 pub struct Romanesco {
-    pub profundidad: u32,
-    pub camara: Camara,
-    anim: Animacion,
+    escena: Escena,
+    paralelo: bool,
+    por_hilo: bool,
     bultos: Vec<Bulto>,
     reparto: Reparto,
-    firma: Option<u32>,
 }
 
 impl Default for Romanesco {
     fn default() -> Self {
         Self {
-            profundidad: 2,
-            camara: Camara::default(),
-            anim: Animacion::new(400.0),
+            escena: Escena::new(2, 400.0),
+            paralelo: false,
+            por_hilo: true,
             bultos: Vec::new(),
             reparto: Reparto::default(),
-            firma: None,
         }
     }
 }
 
 impl Romanesco {
-    fn generar(&mut self) {
+    /// SECUENCIAL: un solo hilo recorre todo en preorden.
+    fn generar_secuencial(&mut self) {
         let mut v = Vec::new();
         for b in hijos(egui::pos2(0.0, BASE_Y), RADIO_BASE) {
-            expandir(&mut v, b, self.profundidad);
+            expandir(&mut v, b, self.escena.profundidad);
         }
 
-        // Un solo hilo: el instante de cada bulto es su posición en el preorden.
+        // El instante de cada bulto es su posición en el preorden.
         let mut reparto = Reparto::nuevo(1);
         for (i, b) in v.iter_mut().enumerate() {
             b.hilo = 0;
@@ -196,7 +194,43 @@ impl Romanesco {
 
         self.bultos = v;
         self.reparto = reparto;
-        self.firma = Some(self.profundidad);
+    }
+
+    /// PARALELO: cada "cabeza" del primer anillo es una tarea independiente (ella y todo su
+    /// subárbol de cabezas más pequeñas). Se calculan en paralelo con rayon y luego se
+    /// reparten entre los trabajadores con una cola dinámica: cada tarea va al hilo
+    /// menos cargado, así que las cabezas grandes y las pequeñas se compensan.
+    fn generar_paralelo(&mut self) {
+        let w = hilos::trabajadores();
+        let prof = self.escena.profundidad;
+
+        let raices = hijos(egui::pos2(0.0, BASE_Y), RADIO_BASE);
+        let subs: Vec<Vec<Bulto>> = raices
+            .into_par_iter()
+            .map(|b| {
+                let mut v = Vec::new();
+                expandir(&mut v, b, prof);
+                v
+            })
+            .collect();
+
+        let costes: Vec<usize> = subs.iter().map(|s| s.len()).collect();
+        let plan = hilos::planificar(&costes, w);
+
+        let total: usize = costes.iter().sum();
+        let mut todos = Vec::with_capacity(total);
+        let mut reparto = Reparto::nuevo(w);
+        for (mut sub, &(hilo, inicio)) in subs.into_iter().zip(plan.iter()) {
+            for (j, b) in sub.iter_mut().enumerate() {
+                b.hilo = hilo as u8;
+                b.tiempo = (inicio + j + 1) as f32;
+                reparto.registrar(hilo, b.tiempo);
+            }
+            todos.extend(sub);
+        }
+
+        self.bultos = todos;
+        self.reparto = reparto;
     }
 }
 
@@ -206,38 +240,34 @@ impl Fractal for Romanesco {
     }
 
     fn ui_controles(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Profundidad:");
-            if ui.add(egui::Slider::new(&mut self.profundidad, 1..=3)).changed() {
-                self.anim.reiniciar();
-            }
-            ui.label("Velocidad:");
-            ui.add(egui::Slider::new(&mut self.anim.velocidad, 10.0..=200000.0).logarithmic(true));
-            if ui.button("Repetir animación").clicked() {
-                self.anim.reiniciar();
-            }
-            if ui.button("Reset zoom").clicked() {
-                self.camara.reset();
-            }
+        let por_hilo = &mut self.por_hilo;
+        self.escena.controles(ui, 3, &mut self.paralelo, |ui, paralelo| {
+            ui.add_enabled(paralelo, egui::Checkbox::new(por_hilo, "Colorear por hilo"));
         });
     }
 
     fn dibujar(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
-        self.camara.interactuar(ui, rect);
-
-        if self.firma != Some(self.profundidad) {
-            self.generar();
+        if self.escena.preparar(ui, rect, self.paralelo) {
+            if self.paralelo {
+                self.generar_paralelo();
+            } else {
+                self.generar_secuencial();
+            }
         }
 
+        let titulo = if self.paralelo {
+            format!("Paralelo: {} hilos", self.reparto.tiempos.len())
+        } else {
+            "Secuencial: 1 hilo".to_string()
+        };
         dibujar_bultos(
             ui,
             rect,
-            &self.camara,
-            &mut self.anim,
+            &mut self.escena,
             &self.bultos,
             &self.reparto,
-            false,
-            "Secuencial: 1 hilo",
+            self.paralelo && self.por_hilo,
+            &titulo,
         );
     }
 }
