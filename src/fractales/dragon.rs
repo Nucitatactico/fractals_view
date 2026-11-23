@@ -139,3 +139,47 @@ impl Fractal for Dragon {
         );
     }
 }
+impl Dragon {
+    pub fn medir(profundidad: u32, paralelo: bool) -> usize {
+        use rayon::prelude::*;
+
+        // Giros de 90 grados para la curva del dragón en iteración `p`
+        let total_giros: usize = (1usize << profundidad).saturating_sub(1);
+        let giros: Vec<i8> = if paralelo {
+            (0..total_giros)
+                .into_par_iter()
+                .map(|i| {
+                    let bit_par = (i & (!i + 1)) << 1;
+                    if (i & bit_par) != 0 { -1i8 } else { 1i8 }
+                })
+                .collect()
+        } else {
+            let mut v = Vec::with_capacity(total_giros);
+            for i in 0..total_giros {
+                let bit_par = (i & (!i + 1)) << 1;
+                v.push(if (i & bit_par) != 0 { -1i8 } else { 1i8 });
+            }
+            v
+        };
+
+        // Recorrido acumulado de vectores doblando 90 grados
+        let paso = 4.0_f32;
+        let mut angulo = 0.0_f32;
+        let mut x = 0.0_f32;
+        let mut y = 0.0_f32;
+        let mut puntos = Vec::with_capacity(giros.len() + 2);
+        puntos.push((x, y));
+        x += paso * angulo.cos();
+        y += paso * angulo.sin();
+        puntos.push((x, y));
+
+        for giro in giros {
+            angulo += (giro as f32) * std::f32::consts::FRAC_PI_2;
+            x += paso * angulo.cos();
+            y += paso * angulo.sin();
+            puntos.push((x, y));
+        }
+
+        puntos.len()
+    }
+}

@@ -303,3 +303,55 @@ impl Fractal for ArbolPitagoras {
         );
     }
 }
+impl ArbolPitagoras {
+    pub fn medir(profundidad: u32, paralelo: bool) -> usize {
+        fn rama_seq(base: egui::Pos2, lado: f32, angulo: f32, nivel: u32, max_nivel: u32, out: &mut Vec<egui::Pos2>) {
+            if nivel > max_nivel || lado < LADO_MIN {
+                return;
+            }
+            let dx = lado * angulo.cos();
+            let dy = lado * angulo.sin();
+            let p2 = egui::Pos2::new(base.x + dx, base.y + dy);
+            out.push(p2);
+
+            let lado_izq = lado * R;
+            let lado_der = lado * R;
+            let ang_izq = angulo - A45;
+            let ang_der = angulo + A45;
+            let cumbre = egui::Pos2::new(p2.x + lado_izq * ang_izq.cos(), p2.y + lado_izq * ang_izq.sin());
+
+            rama_seq(p2, lado_izq, ang_izq, nivel + 1, max_nivel, out);
+            rama_seq(cumbre, lado_der, ang_der, nivel + 1, max_nivel, out);
+        }
+
+        let mut puntos = Vec::new();
+        let inicio = base_raiz();
+        if paralelo {
+            let lado_izq = LADO_RAIZ * R;
+            let lado_der = LADO_RAIZ * R;
+            let ang_izq = ANGULO_INICIAL - A45;
+            let ang_der = ANGULO_INICIAL + A45;
+            let p2 = egui::Pos2::new(inicio.x + LADO_RAIZ * ANGULO_INICIAL.cos(), inicio.y + LADO_RAIZ * ANGULO_INICIAL.sin());
+            let cumbre = egui::Pos2::new(p2.x + lado_izq * ang_izq.cos(), p2.y + lado_izq * ang_izq.sin());
+
+            let (mut izq, mut der) = rayon::join(
+                || {
+                    let mut v = Vec::new();
+                    rama_seq(p2, lado_izq, ang_izq, 1, profundidad, &mut v);
+                    v
+                },
+                || {
+                    let mut v = Vec::new();
+                    rama_seq(cumbre, lado_der, ang_der, 1, profundidad, &mut v);
+                    v
+                },
+            );
+            puntos.push(p2);
+            puntos.append(&mut izq);
+            puntos.append(&mut der);
+        } else {
+            rama_seq(inicio, LADO_RAIZ, ANGULO_INICIAL, 0, profundidad, &mut puntos);
+        }
+        puntos.len()
+    }
+}

@@ -1,0 +1,61 @@
+fractal,detalle,modo,hilos,reps,elementos,min_ms,mediana_ms,media_ms,desv_ms,speedup
+"Copo de Koch","profundidad 8",secuencial,1,10,196608,0.644,1.019,1.362,1.018,1.000
+"Copo de Koch","profundidad 8",paralelo,16,10,196608,0.620,0.836,0.936,0.337,1.218
+"Copo de Koch","profundidad 10",secuencial,1,10,3145728,11.632,11.876,11.871,0.180,1.000
+"Copo de Koch","profundidad 10",paralelo,16,10,3145728,14.101,16.917,16.820,1.519,0.702
+"Copo de Koch","profundidad 12",secuencial,1,10,50331648,196.678,197.704,197.988,1.005,1.000
+"Copo de Koch","profundidad 12",paralelo,16,10,50331648,244.810,257.917,256.415,5.961,0.767
+"Árbol de Pitágoras","profundidad 16",secuencial,1,10,131071,0.984,1.085,1.058,0.049,1.000
+"Árbol de Pitágoras","profundidad 16",paralelo,16,10,131071,0.641,0.809,0.789,0.112,1.342
+"Árbol de Pitágoras","profundidad 20",secuencial,1,10,2097151,16.466,16.965,16.959,0.319,1.000
+"Árbol de Pitágoras","profundidad 20",paralelo,16,10,2097151,9.729,10.359,10.389,0.559,1.638
+"Árbol de Pitágoras","profundidad 22",secuencial,1,10,8388607,73.491,75.147,75.821,2.269,1.000
+"Árbol de Pitágoras","profundidad 22",paralelo,16,10,8388607,46.702,47.683,47.837,0.834,1.576
+"Curva del Dragón","profundidad 14",secuencial,1,10,16385,0.070,0.070,0.071,0.001,1.000
+"Curva del Dragón","profundidad 14",paralelo,16,10,16385,0.106,0.169,0.336,0.499,0.413
+"Curva del Dragón","profundidad 16",secuencial,1,10,65537,0.279,0.284,0.292,0.015,1.000
+"Curva del Dragón","profundidad 16",paralelo,16,10,65537,0.316,0.336,0.337,0.016,0.846
+"Curva del Dragón","profundidad 18",secuencial,1,10,262145,1.190,1.246,1.244,0.020,1.000
+"Curva del Dragón","profundidad 18",paralelo,16,10,262145,1.161,1.240,1.251,0.082,1.005
+"Brócoli Romanesco","profundidad 2",secuencial,1,10,7786,0.063,0.063,0.063,0.000,1.000
+"Brócoli Romanesco","profundidad 2",paralelo,16,10,7786,0.156,0.196,0.331,0.417,0.324
+"Brócoli Romanesco","profundidad 3",secuencial,1,10,181609,1.759,1.823,1.988,0.296,1.000
+"Brócoli Romanesco","profundidad 3",paralelo,16,10,181609,0.975,1.070,1.376,0.702,1.704
+"Mandelbrot (bandas)","800x500 / 500 iter",secuencial,1,10,400000,106.691,106.932,107.139,0.481,1.000
+"Mandelbrot (bandas)","800x500 / 500 iter",paralelo,16,10,400000,22.022,30.933,28.648,3.903,3.457
+"Mandelbrot (intercalado)","800x500 / 500 iter",secuencial,1,10,400000,106.712,106.862,106.939,0.245,1.000
+"Mandelbrot (intercalado)","800x500 / 500 iter",paralelo,16,10,400000,9.877,10.570,10.608,0.416,10.110
+"Mandelbrot (bandas)","1600x1000 / 1000 iter",secuencial,1,10,1600000,833.704,835.417,835.744,1.284,1.000
+"Mandelbrot (bandas)","1600x1000 / 1000 iter",paralelo,16,10,1600000,150.111,153.653,160.219,11.923,5.437
+"Mandelbrot (intercalado)","1600x1000 / 1000 iter",secuencial,1,10,1600000,834.465,837.496,839.187,5.136,1.000
+"Mandelbrot (intercalado)","1600x1000 / 1000 iter",paralelo,16,10,1600000,75.115,77.597,78.451,2.338,10.793
+"Copo de Koch","profundidad 12",paralelo_escalado,1,10,50331648,429.966,438.474,438.137,5.825,0.451
+"Copo de Koch","profundidad 12",paralelo_escalado,2,10,50331648,321.108,332.661,340.314,16.973,0.594
+"Copo de Koch","profundidad 12",paralelo_escalado,4,10,50331648,239.509,241.116,241.645,1.815,0.820
+"Copo de Koch","profundidad 12",paralelo_escalado,8,10,50331648,234.515,239.748,239.174,2.247,0.825
+"Copo de Koch","profundidad 12",paralelo_escalado,16,10,50331648,242.758,248.039,248.376,4.415,0.797
+"Árbol de Pitágoras","profundidad 22",paralelo_escalado,1,10,8388607,79.148,80.816,80.828,1.035,0.930
+"Árbol de Pitágoras","profundidad 22",paralelo_escalado,2,10,8388607,46.263,46.879,46.979,0.729,1.603
+"Árbol de Pitágoras","profundidad 22",paralelo_escalado,4,10,8388607,45.106,46.087,46.158,0.540,1.631
+"Árbol de Pitágoras","profundidad 22",paralelo_escalado,8,10,8388607,46.480,47.306,49.130,5.520,1.589
+"Árbol de Pitágoras","profundidad 22",paralelo_escalado,16,10,8388607,46.567,47.224,47.508,0.817,1.591
+"Curva del Dragón","profundidad 18",paralelo_escalado,1,10,262145,1.075,1.084,1.104,0.043,1.149
+"Curva del Dragón","profundidad 18",paralelo_escalado,2,10,262145,1.111,1.145,1.249,0.301,1.089
+"Curva del Dragón","profundidad 18",paralelo_escalado,4,10,262145,1.074,1.221,1.381,0.397,1.021
+"Curva del Dragón","profundidad 18",paralelo_escalado,8,10,262145,1.136,1.291,1.418,0.321,0.965
+"Curva del Dragón","profundidad 18",paralelo_escalado,16,10,262145,1.147,1.375,1.453,0.301,0.906
+"Brócoli Romanesco","profundidad 3",paralelo_escalado,1,10,181609,2.326,2.820,2.989,0.674,0.646
+"Brócoli Romanesco","profundidad 3",paralelo_escalado,2,10,181609,1.346,2.351,2.992,1.425,0.775
+"Brócoli Romanesco","profundidad 3",paralelo_escalado,4,10,181609,1.066,1.650,1.522,0.298,1.105
+"Brócoli Romanesco","profundidad 3",paralelo_escalado,8,10,181609,0.812,1.162,1.130,0.154,1.569
+"Brócoli Romanesco","profundidad 3",paralelo_escalado,16,10,181609,0.848,1.221,1.517,0.655,1.493
+"Mandelbrot (bandas)","1600x1000 / 1000 iter",paralelo_escalado,1,10,1600000,836.071,837.728,840.561,6.475,0.997
+"Mandelbrot (bandas)","1600x1000 / 1000 iter",paralelo_escalado,2,10,1600000,426.505,430.886,430.621,2.860,1.939
+"Mandelbrot (bandas)","1600x1000 / 1000 iter",paralelo_escalado,4,10,1600000,401.098,408.045,409.518,6.530,2.047
+"Mandelbrot (bandas)","1600x1000 / 1000 iter",paralelo_escalado,8,10,1600000,260.111,264.540,270.933,12.098,3.158
+"Mandelbrot (bandas)","1600x1000 / 1000 iter",paralelo_escalado,16,10,1600000,159.272,180.461,180.203,12.919,4.629
+"Mandelbrot (intercalado)","1600x1000 / 1000 iter",paralelo_escalado,1,10,1600000,835.849,836.810,837.791,2.871,1.001
+"Mandelbrot (intercalado)","1600x1000 / 1000 iter",paralelo_escalado,2,10,1600000,421.587,426.468,426.620,4.644,1.964
+"Mandelbrot (intercalado)","1600x1000 / 1000 iter",paralelo_escalado,4,10,1600000,222.536,223.929,224.004,0.871,3.740
+"Mandelbrot (intercalado)","1600x1000 / 1000 iter",paralelo_escalado,8,10,1600000,128.041,129.711,130.812,2.948,6.457
+"Mandelbrot (intercalado)","1600x1000 / 1000 iter",paralelo_escalado,16,10,1600000,75.817,79.863,80.292,3.433,10.487

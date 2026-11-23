@@ -271,3 +271,28 @@ impl Fractal for Romanesco {
         );
     }
 }
+impl Romanesco {
+    pub fn medir(profundidad: u32, paralelo: bool) -> usize {
+        use rayon::prelude::*;
+
+        let iniciales = hijos(egui::Pos2::new(0.0, BASE_Y), RADIO_BASE);
+        let todos: Vec<Bulto> = if paralelo {
+            iniciales
+                .into_par_iter()
+                .flat_map(|b| {
+                    let mut local = Vec::new();
+                    expandir(&mut local, b, profundidad);
+                    local
+                })
+                .collect()
+        } else {
+            let mut local = Vec::new();
+            for b in iniciales {
+                expandir(&mut local, b, profundidad);
+            }
+            local
+        };
+
+        todos.len()
+    }
+}

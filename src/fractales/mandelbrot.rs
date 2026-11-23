@@ -375,3 +375,71 @@ impl Fractal for Mandelbrot {
         hilos::panel(&painter, rect, &titulo, &filas);
     }
 }
+#[derive(Clone, Copy)]
+pub enum ModoMandelbrot {
+    Secuencial,
+    Bandas,
+    Intercalado,
+}
+
+impl Mandelbrot {
+    pub fn medir(ancho: usize, alto: usize, max_iter: u32, modo: ModoMandelbrot) -> usize {
+        use rayon::prelude::*;
+
+        let evaluar = |px: usize, py: usize| -> u32 {
+            let cx = -2.0 + (px as f64 / ancho.max(1) as f64) * 3.0;
+            let cy = -1.25 + (py as f64 / alto.max(1) as f64) * 2.5;
+            let (mut zx, mut zy) = (0.0_f64, 0.0_f64);
+            let mut iter = 0u32;
+            while zx * zx + zy * zy <= 4.0 && iter < max_iter {
+                let tmp = zx * zx - zy * zy + cx;
+                zy = 2.0 * zx * zy + cy;
+                zx = tmp;
+                iter += 1;
+            }
+            iter
+        };
+
+        let salida: Vec<u32> = match modo {
+            ModoMandelbrot::Secuencial => {
+                let mut buf = Vec::with_capacity(ancho * alto);
+                for py in 0..alto {
+                    for px in 0..ancho {
+                        buf.push(evaluar(px, py));
+                    }
+                }
+                buf
+            }
+            ModoMandelbrot::Bandas => {
+                let n_hilos = rayon::current_num_threads().max(1);
+                let tam_banda = (alto + n_hilos - 1) / n_hilos;
+                (0..n_hilos)
+                    .into_par_iter()
+                    .flat_map(|b| {
+                        let y_ini = b * tam_banda;
+                        let y_fin = ((b + 1) * tam_banda).min(alto);
+                        let mut sub = Vec::with_capacity((y_fin.saturating_sub(y_ini)) * ancho);
+                        for py in y_ini..y_fin {
+                            for px in 0..ancho {
+                                sub.push(evaluar(px, py));
+                            }
+                        }
+                        sub
+                    })
+                    .collect()
+            }
+            ModoMandelbrot::Intercalado => (0..alto)
+                .into_par_iter()
+                .flat_map(|py| {
+                    let mut fila = Vec::with_capacity(ancho);
+                    for px in 0..ancho {
+                        fila.push(evaluar(px, py));
+                    }
+                    fila
+                })
+                .collect(),
+        };
+
+        salida.len()
+    }
+}

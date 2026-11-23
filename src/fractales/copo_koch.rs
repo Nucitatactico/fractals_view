@@ -127,3 +127,42 @@ impl Fractal for CopoKoch {
         );
     }
 }
+impl CopoKoch {
+    pub fn medir(profundidad: u32, paralelo: bool) -> usize {
+        use rayon::prelude::*;
+
+        fn subdividir_segmento(a: egui::Pos2, b: egui::Pos2, nivel: u32, out: &mut Vec<(egui::Pos2, egui::Pos2)>) {
+            if nivel == 0 {
+                out.push((a, b));
+                return;
+            }
+            let (p1, pico, p2) = crate::fractales::koch_puntos(a, b);
+            subdividir_segmento(a, p1, nivel - 1, out);
+            subdividir_segmento(p1, pico, nivel - 1, out);
+            subdividir_segmento(pico, p2, nivel - 1, out);
+            subdividir_segmento(p2, b, nivel - 1, out);
+        }
+
+        let tri = crate::fractales::triangulo_koch();
+        let lados = [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])];
+
+        let segmentos: Vec<(egui::Pos2, egui::Pos2)> = if paralelo {
+            lados
+                .par_iter()
+                .flat_map(|&(a, b)| {
+                    let mut local = Vec::new();
+                    subdividir_segmento(a, b, profundidad, &mut local);
+                    local
+                })
+                .collect()
+        } else {
+            let mut local = Vec::new();
+            for (a, b) in lados {
+                subdividir_segmento(a, b, profundidad, &mut local);
+            }
+            local
+        };
+
+        segmentos.len()
+    }
+}

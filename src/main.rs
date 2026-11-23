@@ -6,10 +6,17 @@ mod escena;
 mod fractales;
 mod hilos;
 mod pixel_art;
+mod bench;
 
 use pixel_art::MyPixelArt;
 
 fn main() -> eframe::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+
+    if args.iter().any(|a| a == "--bench") {
+        bench::ejecutar(&args);
+        return Ok(());
+    }
     let title = String::from("Fractales EDA2");
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()

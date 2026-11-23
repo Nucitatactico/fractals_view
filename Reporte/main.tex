@@ -1,0 +1,156 @@
+\input{plantilla}  
+
+\begin{document}
+
+{\centering \section*{COMPUTACIÓN PARALELA Y DISTRIBUIDA}\par}
+{\centering \section*{PROYECTO: Fractales}\par}
+\section*{Objetivo}
+Desarrollar e implementar un visualizador interactivo y animado de fractales aplicando conceptos de programación paralela para optimizar tanto el cálculo geométrico como la fluidez de renderizado en tiempo real.
+\section*{Descripción general:} El proyecto consiste en una aplicación gráfica escrita en Rust que permite generar, animar y comparar en una misma vista el rendimiento entre la ejecución secuencial y la ejecución paralela de distintas familias fractales.
+
+
+{\centering \section*{DESARROLLO Y ANÁLISIS DEL PRODUCTO PARALELO}\par}
+
+% ----------------------------------------------------------------------------
+% BLOQUE 1: HISTORIA Y PQ
+% ----------------------------------------------------------------------------
+\begin{ejercicio}{1.- Descripción del algoritmo y versión secuencial}
+\end{ejercicio}
+
+\begin{respuesta}{1.- Historia y evolución del desarrollo}
+    El proyecto nació inicialmente de una idea muy concreta: generar de forma gráfica el \textbf{Árbol de Pitágoras}. En esa primera etapa el objetivo era únicamente validar las transformaciones geométricas necesarias para ir levantando sus ramas en pantalla. Sin embargo, al ver el resultado funcionando, surgió la curiosidad de integrar más familias fractales dentro del mismo programa, por lo que se diseñó un menú principal para poder elegir entre distintas figuras.
+
+    Una vez que se tenían varios fractales reunidos, llegó la siguiente idea: animar su construcción cuadro por cuadro. El propósito detrás de animarlos fue ir más allá de demostrar una simple mejora interna en tiempos de cálculo numérico; queríamos evidenciar lo esenciales que son los hilos de ejecución dentro de la computación gráfica. Cuando se dibuja una animación en tiempo real en un solo hilo, la interfaz se satura calculando coordenadas y pierde fluidez. Al repartir esa carga en múltiples hilos, logramos que las animaciones corran de manera fluida sin congelar la ventana.
+    \captura{img1.png}
+\end{respuesta}
+
+\begin{respuesta}{2.- Funcionamiento vectorial y paralelismo por fractal}
+    Cada fractal implementado responde a una lógica distinta tanto en la generación de sus vectores como en la estrategia empleada para paralelizarlo:
+    \begin{itemize}
+        \item \textbf{Árbol de Pitágoras:} Parte de un cuadrado base sobre el cual se construye un triángulo rectángulo que da origen a dos nuevos cuadrados inclinados. A medida que avanza la profundidad, cada rama se bifurca de manera independiente, permitiendo repartir los subárboles entre distintos hilos de ejecución.
+        
+        \item \textbf{Curva de Koch:} Su animación funciona mediante vectores que se subdividen en tercios y se doblan exactamente $60^\circ$ hacia afuera para formar los picos característicos. Como cada segmento de una iteración se transforma aplicando exactamente la misma regla sin depender de sus vecinos, todos los vectores de un nivel pueden calcularse de forma simultánea.
+        
+        \item \textbf{Curva del Dragón y Brócoli Romanesco:} En la Curva del Dragón la animación consiste en una cadena de vectores que simplemente se van doblando $90^\circ$ siguiendo un patrón de pliegues, mientras que el Brócoli Romanesco sigue una espiral gobernada por la proporción áurea donde cada brote replica la estructura completa a menor escala. En esencia, ninguno de estos dos fractales es paralelizable de manera natural paso a paso, porque para saber dónde empieza un vector necesitas saber dónde terminó el anterior. Sin embargo, al conocer de antemano el área final y la cantidad total de vértices que va a ocupar la figura completa, se puede reservar la memoria previamente y dividir el cálculo por bloques o regiones, logrando acelerar igualmente el proceso.
+        
+        \item \textbf{Conjunto de Mandelbrot:} Aquí no trabajamos con vectores sino directamente con los píxeles de la pantalla mapeados al plano complejo, evaluando la fórmula iterativa $z_{n+1} = z_n^2 + c$. En este caso el paralelismo es completamente natural: la ventana se divide en franjas o grupos de píxeles independientes y cada hilo calcula el color de su zona sin tener que comunicarse con los demás.
+    \end{itemize}
+\end{respuesta}
+
+\begin{respuesta}{3.- Existencia de versión secuencial}
+    Sí existe una versión secuencial y, de hecho, está integrada dentro de la misma vista interactiva junto con la versión paralela. En lugar de tener dos programas separados, diseñamos la interfaz para que se pueda alternar en tiempo real entre el modo secuencial y el modo paralelo mientras corre la animación, permitiendo observar al instante la diferencia en fluidez y velocidad de respuesta.
+    \captura{img2.png}
+\end{respuesta}
+
+\begin{ejercicio}{2.- Características de Paralelización}
+\end{ejercicio}
+
+\begin{respuesta}{1.- Características aplicadas}
+    \begin{itemize}
+        \item \textbf{Tipo de paralelismo:} Se utiliza \textit{paralelismo de datos}. En el Conjunto de Mandelbrot cada hilo procesa un bloque distinto de píxeles de la pantalla, mientras que en los fractales vectoriales cada hilo se encarga de calcular un subconjunto independiente de segmentos o ramas dentro del nivel de iteración actual.
+        
+        \item \textbf{Métricas de desempeño:} El rendimiento se midió tomando el tiempo de generación por cuadro en milisegundos (ms), observando la fluidez visual (cuadros por segundo) durante las animaciones y calculando la aceleración (\textit{Speedup}) al dividir el tiempo de la versión secuencial entre el tiempo de la versión paralela.
+        
+        \item \textbf{Formas de comunicación:} Se trabaja bajo un esquema de memoria compartida. Los hilos trabajadores reciben únicamente los parámetros iniciales de su bloque (ángulos, profundidad, escalas o coordenadas del plano) y escriben los vectores o colores resultantes en arreglos preasignados, sincronizándose únicamente al terminar el cuadro completo para mandarlo a dibujar.
+        
+        \item \textbf{Granularidad:} Se eligió una \textit{granularidad media-gruesa}. En lugar de lanzar un hilo por cada vector individual o por cada píxel —lo cual metería demasiada sobrecarga al sistema operativo—, cada tarea agrupa cientos de segmentos o franjas completas de píxeles para amortizar el costo de gestión de hilos.
+        
+        \item \textbf{Balance de carga:} En fractales como Koch, donde cada segmento hace exactamente las mismas operaciones geométricas, repartir los bloques de forma equitativa mantiene todos los núcleos ocupados por igual. En cambio, en Mandelbrot hay zonas negras donde las iteraciones llegan al límite y tardan mucho más que el fondo; por ello se divide la pantalla en varias franjas pequeñas para que los hilos que acaban rápido las zonas simples tomen las franjas más pesadas y se equilibre el trabajo.
+    \end{itemize}
+\end{respuesta}
+
+% ----------------------------------------------------------------------------
+% BLOQUE 3: IMPLEMENTACIÓN EN RUST
+% ----------------------------------------------------------------------------
+\begin{ejercicio}{3.- Lenguaje de implementación}
+\end{ejercicio}
+
+\begin{respuesta}{1.- ¿Por qué elegimos Rust?}
+    Decidimos implementar \textbf{Rust} principalmente porque ya veníamos trabajándolo desde hace tiempo y nos resulta sumamente cómodo para manejar hilos de ejecución. Mientras que en otros lenguajes compartir estructuras gráficas entre varios hilos suele terminar en errores de memoria o condiciones de carrera difíciles de rastrear, Rust verifica desde la compilación que ningún hilo pise los datos de otro, lo que hizo mucho más sencillo y seguro escalar las animaciones a múltiples núcleos.
+
+    Además, una de sus grandes ventajas es su rendimiento nativo en tiempo de ejecución, prácticamente a la par de C o C++. Esa velocidad resultó ideal para sostener animaciones vectoriales y el recálculo constante de cuadros en tiempo real sin que la aplicación se sienta pesada.
+    \captura{img3.png}
+\end{respuesta}
+
+% ----------------------------------------------------------------------------
+% BLOQUE 4: PRUEBAS REALIZADAS
+% ----------------------------------------------------------------------------
+\begin{ejercicio}{4.- Pruebas realizadas y análisis de rendimiento}
+\end{ejercicio}
+
+\begin{respuesta}{1.- Versión secuencial vs. Versión paralela (¿Cuál es mejor?)}
+    La respuesta depende del escenario de uso, y el proyecto permite distinguir dos:
+
+    \begin{itemize}
+        \item \textbf{En la animación interactiva (uso real del visualizador):} la versión paralela es claramente superior. Al repartir el cálculo de cada cuadro entre varios hilos, la interfaz mantiene la fluidez y responde a la entrada del usuario incluso en profundidades altas. La versión secuencial, en cambio, satura el único hilo calculando coordenadas y la ventana se congela o pierde cuadros.
+
+        \item \textbf{En el benchmark por lotes (medición aislada):} el resultado depende del tamaño de la instancia. Para instancias grandes (Mandelbrot 1600x1000, Pitágoras prof. 22, Koch prof. 12) el paralelo gana con claridad. Para instancias pequeñas (Dragón prof. 14, Romanesco prof. 2, Koch prof. 8) el paralelo puede quedar por debajo del secuencial porque el costo fijo de crear y repartir tareas en Rayon supera el trabajo útil a repartir.
+    \end{itemize}
+
+    Por eso el análisis de rendimiento se presenta en dos partes: primero la comparación directa secuencial/paralelo sobre las instancias máximas (donde el paralelismo demuestra su ventaja), y después el estudio de escalado con distinto número de hilos (donde se aprecia el techo práctico de aceleración y el efecto del \textit{overhead}).
+\end{respuesta}
+\begin{respuesta}{2.- Pruebas para diferentes instancias} Se ejecutaron mediciones sobre las instancias máximas de cada fractal usando el binario en modo \texttt{--release} (sin interfaz gráfica), con 1 ejecución de calentamiento y 10 repeticiones por caso; se reporta la \textbf{mediana} del tiempo por invocación en milisegundos. La aceleración se calcula como $\text{Speedup} = T_{\text{secuencial}} / T_{\text{paralelo}}$.
+
+    \begin{table}[H]
+    \centering
+    \begin{tabular}{llccc}
+        \toprule
+        \textbf{Fractal} & \textbf{Instancia} & \textbf{Secuencial (ms)} & \textbf{Paralelo (ms)} & \textbf{Aceleración} \\
+        \midrule
+        Copo de Koch & profundidad 8 & 1.02 & 0.84 & 1.22x \\
+        Copo de Koch & profundidad 10 & 11.88 & 16.92 & 0.70x \\
+        Copo de Koch & profundidad 12 & 197.70 & 257.92 & 0.77x \\
+        Árbol de Pitágoras & profundidad 16 & 1.08 & 0.81 & 1.34x \\
+        Árbol de Pitágoras & profundidad 20 & 16.96 & 10.36 & 1.64x \\
+        Árbol de Pitágoras & profundidad 22 & 75.15 & 47.68 & 1.58x \\
+        Curva del Dragón & profundidad 14 & 0.07 & 0.17 & 0.41x \\
+        Curva del Dragón & profundidad 16 & 0.28 & 0.34 & 0.85x \\
+        Curva del Dragón & profundidad 18 & 1.25 & 1.24 & 1.00x \\
+        Brócoli Romanesco & profundidad 2 & 0.06 & 0.20 & 0.32x \\
+        Brócoli Romanesco & profundidad 3 & 1.82 & 1.07 & 1.70x \\
+        Mandelbrot (bandas) & 800x500 / 500 iter & 106.93 & 30.93 & 3.46x \\
+        Mandelbrot (intercalado) & 800x500 / 500 iter & 106.86 & 10.57 & 10.11x \\
+        Mandelbrot (bandas) & 1600x1000 / 1000 iter & 835.42 & 153.65 & 5.44x \\
+        Mandelbrot (intercalado) & 1600x1000 / 1000 iter & 837.50 & 77.60 & 10.79x \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+    \textbf{Lectura de los resultados.} Se distinguen dos regímenes:
+
+    \begin{itemize}
+        \item \textbf{Instancias grandes (donde el paralelismo rinde):} el Conjunto de Mandelbrot es el caso paradigmático. Con la estrategia \textit{intercalada} (repartir filas alternas entre hilos) se alcanza una aceleración de
+        $\approx 10.1\times$ y $\approx 10.8\times$, muy cercana al número de núcleos lógicos disponibles (16), porque el trabajo por píxel es uniforme y abundante.La estrategia por \textit{bandas} es algo peor ($3.5\times$ y $5.4\times$) por el
+        desbalance entre zonas simples y zonas de borde en Mandelbrot. El Árbol de Pitágoras también mejora de forma consistente ($1.34\times$ a $1.64\times$).
+
+        \item \textbf{Instancias pequeñas (donde el \textit{overhead} domina):} en Dragón prof. 14 (0.07 ms), Romanesco prof. 2 (0.06 ms) o Koch prof. 8 (1.02 ms) el tiempo secuencial es tan reducido que el costo fijo de crear y sincronizar las
+        tareas de Rayon pesa más que el cálculo repartido, dando aceleraciones $< 1$. Esto \textbf{no contradice} la mejora visual: en la animación el trabajo se acumula cuadro tras cuadro y el reparto continuo sí amortiza ese costo fijo; en una invocación aislada de benchmark no hay nada que amortizar.
+    \end{itemize}
+
+    \captura{img4.png}
+\end{respuesta}
+\begin{respuesta}{3.- Gráficas de tiempos de ejecución y escalabilidad}
+    El análisis gráfico se organiza en dos vistas complementarias:
+
+    \begin{itemize}
+        \item \textbf{Comparación directa secuencial vs. paralelo (Figura de barras).}
+        Para cada instancia se contrasta el tiempo secuencial frente al paralelo. Las barras paralelas son notablemente más bajas en Mandelbrot y en las instancias grandes de Pitágoras y Koch; en las instancias pequeñas de Dragón y Romanesco las barras son prácticamente iguales porque el tiempo total está dominado por el costo fijo de gestión de hilos.
+
+        \item \textbf{Escalabilidad con el número de hilos (Figura de curvas).} Se varió el tamaño del pool de Rayon (1, 2, 4, 8 y 16 hilos) sobre la instancia máxima de cada fractal. Para Mandelbrot la curva crece de forma casi lineal hasta 16 hilos ($10.5\times$ en intercalado, $4.6\times$ en bandas). Para Pitágoras el speedup satura alrededor de $1.6\times$ a partir de 2 hilos: el paralelismo por \texttt{rayon::join} solo divide en dos subárboles, así que no puede aprovechar más de 2 núcleos. Para Koch, Dragón y Romanesco el speedup se estanca o incluso decrece al aumentar hilos, lo que confirma que el cuello de botella no es el cómputo sino la sincronización y la recolección de resultados.
+    \end{itemize}
+
+    \textbf{Conclusión del análisis numérico.} El paralelismo aporta su mayor beneficio cuando:
+    \begin{enumerate}
+        \item El trabajo por tarea es grande y uniforme (Mandelbrot).
+        \item La estructura del algoritmo permite dividir en más de dos ramas independientes.  
+        \item El número de hilos no excede el paralelismo intrínseco del problema. 
+    \end{enumerate}
+    En los casos donde el trabajo útil por tarea es minúsculo, el \textit{overhead} de Rayon domina y el paralelo empata o pierde frente al secuencial en la medición aislada — aunque en la animación en vivo la fluidez sigue siendo mejor gracias a la amortización entre cuadros.
+    \captura{img5.png}
+\end{respuesta}
+
+\section*{CONCLUSIÓN}
+El desarrollo permitió comprobar de forma visual e interactiva el impacto real de la programación paralela en aplicaciones gráficas. La versión paralela mantuvo la interfaz fluida y responsiva en todos los fractales, y en las instancias de mayor carga
+(Mandelbrot hasta $10.8\times$, Pitágoras $1.6\times$) la aceleración medida confirmó la ganancia. El estudio de escalado mostró además que el beneficio del paralelismo no es automático: depende de la granularidad del trabajo, de la estructura del algoritmo (dos ramas en Pitágoras vs. muchas franjas en Mandelbrot) y del tamaño de la instancia. En instancias pequeñas el \textit{overhead} de gestión de hilos puede anular la ganancia en una invocación aislada, aunque en el uso interactivo el reparto continuo entre cuadros sigue amortizando ese costo. El uso de Rust facilitó implementar esta concurrencia de manera segura y con rendimiento óptimo para animaciones en tiempo real.
+
+\end{document}

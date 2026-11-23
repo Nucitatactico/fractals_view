@@ -1,0 +1,114 @@
+\documentclass{article}
+
+% ---------- Codificación e idioma ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+% ---------- Matemáticas ----------
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+% ---------- Tipografía ----------
+\usepackage[ttdefault=true]{AnonymousPro}
+\usepackage{parskip}
+
+% ---------- Geometría ----------
+\usepackage[margin=2.5cm]{geometry}
+
+% ---------- Listas (Configuración global optimizada) ----------
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=*, itemsep=2pt, topsep=3pt}
+\setlist[enumerate]{leftmargin=*, itemsep=2pt, topsep=3pt}
+
+% ---------- Cajas de color ----------
+\usepackage{tcolorbox}
+\usepackage{xcolor}
+
+% ---------- Gráficos y Tablas ----------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{pgffor}
+\usepackage{booktabs}
+
+% ---------- Otros ----------
+\usepackage{multicol}
+\usepackage{url}
+
+% ============================================================================
+% COLORES INSTITUCIONALES (UNAM)
+% ============================================================================
+\definecolor{unamazul}{RGB}{0, 83, 155}
+\definecolor{unagris}{RGB}{240, 240, 240}
+
+% ============================================================================
+% ENTORNOS PERSONALIZADOS
+% ============================================================================
+
+% --- Caja para enunciados de secciones/ejercicios ---
+\newtcolorbox{ejercicio}[1]{
+    colback=unagris,
+    colframe=unamazul,
+    arc=2mm,
+    boxrule=0.8pt,
+    left=5pt,
+    right=5pt,
+    top=5pt,
+    bottom=5pt,
+    title=#1,
+    coltitle=white,
+    colbacktitle=unamazul,
+    fonttitle=\bfseries\large
+}
+
+% --- Caja sin título ---
+\newtcolorbox{propbox}{
+    colback=unagris,
+    colframe=unamazul,
+    arc=2mm,
+    boxrule=0.8pt,
+    left=5pt,
+    right=5pt,
+    top=5pt,
+    bottom=5pt
+}
+
+% --- Entorno para respuestas numeradas ---
+\newenvironment{respuesta}[1]{%
+  \ifx\relax#1\relax
+    % sin argumento: no imprime nada
+  \else
+    \subsubsection*{#1}%
+  \fi
+}{}
+
+% ============================================================================
+% COMANDOS PERSONALIZADOS
+% ============================================================================
+% --- Capturas de pantalla ---
+\newcommand{\captura}[1]{%
+    \begin{center}
+        \includegraphics[width=0.7\textwidth]{imgs/#1}
+    \end{center}
+}
+\newcommand{\capturaancha}[1]{%
+    \begin{center}
+        \includegraphics[width=0.9\textwidth]{imgs/#1}
+    \end{center}
+}
+\newcommand{\capturafina}[1]{%
+    \begin{center}
+        \includegraphics[width=0.5\textwidth]{imgs/#1}
+    \end{center}
+}
+\newcommand{\capturacolumna}[1]{%
+    \begin{minipage}{0.3\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{imgs/#1}
+    \end{minipage}\hfill
+}
+
+% --- Código inline ---
+\newcommand{\codigo}[1]{\texttt{#1}}
+
+\pagestyle{empty}
