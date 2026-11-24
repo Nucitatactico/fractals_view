@@ -5,15 +5,10 @@ use crate::hilos::{self, Reparto};
 use eframe::egui::{self, Color32, Pos2};
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_4, PI};
 
-/// Lado del cuadrado raíz (unidades del mundo).
 pub const LADO_RAIZ: f32 = 140.0;
-/// No se generan cuadrados más pequeños que esto (en unidades del mundo).
-pub const LADO_MIN: f32 = 0.05;
+pub const LADO_MIN: f32 = 0.01;
 pub const A45: f32 = FRAC_PI_4;
-/// cos(45°) = sin(45°): ambos hijos miden lado * R.
 pub const R: f32 = FRAC_1_SQRT_2;
-/// Cada cuadrado "crece" hacia su perpendicular (-sen, cos). Con -PI esa dirección
-/// apunta hacia arriba en pantalla (Y negativo), así el tronco sube.
 pub const ANGULO_INICIAL: f32 = -PI;
 
 pub struct Nodo {
@@ -29,7 +24,6 @@ pub fn crear_nodo(base: Pos2, lado: f32, angulo: f32, nivel: u32, prof_max: u32)
     let v2 = v1 + egui::vec2(-sin * lado, cos * lado);
     let v3 = base + egui::vec2(-sin * lado, cos * lado);
     // Ápice del triángulo rectángulo sobre el lado superior: ahí nace el hijo derecho.
-    // (Es el primer vértice del hijo izquierdo: v3 + dirección(ángulo + 45°) * lado * cos 45°.)
     let (sin_h, cos_h) = (angulo + A45).sin_cos();
     let apice = v3 + egui::vec2(cos_h * lado * R, sin_h * lado * R);
 
@@ -78,7 +72,6 @@ pub fn generar_rec(
     generar_rec(out, n.base_der, l, angulo - A45, nivel + 1, prof_max);
 }
 
-/// Base del cuadrado raíz. La posición exacta da igual: `Geometria::nueva` centra el árbol.
 pub fn base_raiz() -> Pos2 {
     egui::pos2(LADO_RAIZ / 2.0, 0.0)
 }
@@ -125,9 +118,7 @@ fn centrar(cuadrados: &mut [Cuadrado]) {
     }
 }
 
-/// Simula la ejecución: cada hilo procesa sus nodos uno tras otro (1 unidad de trabajo
-/// por nodo) y un nodo no puede empezar antes de que termine su padre.
-/// Con 1 hilo el instante de cada nodo es simplemente su posición en el preorden.
+/// Simula la ejecución: cada hilo procesa sus nodos uno tras oto
 pub fn asignar_tiempos(cuadrados: &mut [Cuadrado], trabajadores: usize) -> Reparto {
     let w = trabajadores.max(1);
     let mut libre = vec![0.0f32; w];
@@ -147,10 +138,7 @@ pub fn asignar_tiempos(cuadrados: &mut [Cuadrado], trabajadores: usize) -> Repar
     reparto
 }
 
-/// PARALELO (fork-join): mientras al subárbol le queden varios trabajadores se bifurca con
-/// `rayon::join` y los trabajadores se reparten entre las dos ramas (mitad y mitad).
-/// Cuando queda uno solo, ese hilo termina el subárbol de forma secuencial.
-/// `ini..ini+n` son los trabajadores disponibles; el nodo lo atiende `ini`.
+/// Cuando queda uno solo, ese hilo termina el subárbol de forma secuencial
 fn generar_par(
     base: Pos2,
     lado: f32,
@@ -191,7 +179,6 @@ fn generar_par(
     v
 }
 
-/// Dibujo del árbol (la cámara ya se procesó en `Escena::preparar`).
 pub fn dibujar_arbol(
     ui: &mut egui::Ui,
     rect: egui::Rect,
@@ -238,7 +225,6 @@ impl Default for ArbolPitagoras {
 }
 
 impl ArbolPitagoras {
-    /// SECUENCIAL: una sola recursión en preorden.
     fn generar_secuencial(&mut self) {
         let mut v = Vec::new();
         generar_rec(

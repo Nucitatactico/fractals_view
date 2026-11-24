@@ -196,10 +196,7 @@ impl Romanesco {
         self.reparto = reparto;
     }
 
-    /// PARALELO: cada "cabeza" del primer anillo es una tarea independiente (ella y todo su
-    /// subárbol de cabezas más pequeñas). Se calculan en paralelo con rayon y luego se
-    /// reparten entre los trabajadores con una cola dinámica: cada tarea va al hilo
-    /// menos cargado, así que las cabezas grandes y las pequeñas se compensan.
+    /// PARALELO: cada "cabeza" del primer anillo es una tarea independiente
     fn generar_paralelo(&mut self) {
         let w = hilos::trabajadores();
         let prof = self.escena.profundidad;

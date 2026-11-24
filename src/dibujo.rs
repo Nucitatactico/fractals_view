@@ -104,9 +104,7 @@ pub fn polilinea(
     painter.extend(shapes);
 }
 
-/// Dibuja cuadrados (coordenadas del mundo) en `Mesh`es.
-/// - `hasta`: solo se dibujan los que ya "nacieron" (`tiempo <= hasta`).
-/// - `paleta`: si existe, tiñe cada cuadrado con el color de su hilo.
+/// Dibuja cuadrados desde hasta donde se pide con base en su hilo
 pub fn cuadrados(
     painter: &egui::Painter,
     camara: &Camara,
@@ -170,7 +168,7 @@ pub fn cuadrados(
     painter.extend(bordes);
 }
 
-// ---------- Discos (Romanesco) ----------
+//Dicsos
 
 const SEGMENTOS: [usize; 4] = [4, 8, 14, 24];
 static TABLAS: OnceLock<[Vec<Vec2>; 4]> = OnceLock::new();
@@ -188,7 +186,7 @@ fn tablas() -> &'static [Vec<Vec2>; 4] {
     })
 }
 
-/// Añade un disco relleno al mesh con un número de lados acorde a su tamaño en pantalla.
+/// Agrga un disco relleno al mesh con un número de lados acorde a su tamaño en pantalla.
 pub fn disco(mesh: &mut Mesh, centro: Pos2, r: f32, color: Color32) {
     let idx = if r < 2.0 {
         0

@@ -3,9 +3,8 @@
 
 use eframe::egui::{self, Align2, Color32, FontId, Painter, Rect};
 
-/// Número de trabajadores que se muestran (hilos del pool de rayon, entre 2 y 12).
 pub fn trabajadores() -> usize {
-    rayon::current_num_threads().clamp(2, 12)
+    rayon::current_num_threads().clamp(2, 4)
 }
 
 /// Color distinto y estable para cada hilo (ángulo áureo sobre el tono).
@@ -21,7 +20,6 @@ pub fn mezclar(a: Color32, b: Color32, t: f32) -> Color32 {
 }
 
 /// Reparto dinámico: cada tarea va al trabajador con menos carga acumulada
-/// (como la cola de trabajo de un pool). Devuelve (trabajador, instante de inicio) por tarea.
 pub fn planificar(costes: &[usize], w: usize) -> Vec<(usize, usize)> {
     let mut carga = vec![0usize; w.max(1)];
     costes
@@ -56,16 +54,14 @@ impl Reparto {
         Self { tiempos: vec![Vec::new(); w.max(1)], total: 0.0 }
     }
 
-    /// Hay que registrar los elementos de cada hilo en orden temporal creciente.
+    ///Registro en orden temporal
     pub fn registrar(&mut self, hilo: usize, t: f32) {
         self.tiempos[hilo].push(t);
         if t > self.total {
             self.total = t;
         }
     }
-
-    /// Solo los hilos que ya nacieron (su primer elemento ya se terminó), en orden de
-    /// nacimiento: las barras van apareciendo conforme el fork-join crea hilos.
+    ///Barras de trabajo conforme nacen, esta coqueto
     pub fn filas(&self, hasta: f32) -> Vec<FilaHilo> {
         let mut filas: Vec<(f32, FilaHilo)> = self
             .tiempos

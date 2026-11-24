@@ -6,11 +6,9 @@ use eframe::egui::{self, Color32, Pos2};
 use rayon::prelude::*;
 
 /// Por debajo de este nivel restante se calcula en secuencial
-/// (paralelizar tareas diminutas cuesta más que el trabajo útil).
-const UMBRAL_PARALELO: u32 = 6;
+const UMBRAL_PARALELO: u32 = 12;
 
 /// PARALELO: rellena `out` (longitud exacta 4^prof) con el punto de inicio de cada segmento hoja.
-/// Sin Vec intermedios: cada tarea escribe directo en su porción del slice.
 fn rellenar(a: Pos2, b: Pos2, prof: u32, out: &mut [Pos2]) {
     if prof == 0 {
         out[0] = a;

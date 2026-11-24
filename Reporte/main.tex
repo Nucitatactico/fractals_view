@@ -11,9 +11,6 @@ Desarrollar e implementar un visualizador interactivo y animado de fractales apl
 
 {\centering \section*{DESARROLLO Y ANÁLISIS DEL PRODUCTO PARALELO}\par}
 
-% ----------------------------------------------------------------------------
-% BLOQUE 1: HISTORIA Y PQ
-% ----------------------------------------------------------------------------
 \begin{ejercicio}{1.- Descripción del algoritmo y versión secuencial}
 \end{ejercicio}
 
@@ -59,9 +56,6 @@ Desarrollar e implementar un visualizador interactivo y animado de fractales apl
     \end{itemize}
 \end{respuesta}
 
-% ----------------------------------------------------------------------------
-% BLOQUE 3: IMPLEMENTACIÓN EN RUST
-% ----------------------------------------------------------------------------
 \begin{ejercicio}{3.- Lenguaje de implementación}
 \end{ejercicio}
 
@@ -72,9 +66,6 @@ Desarrollar e implementar un visualizador interactivo y animado de fractales apl
     \captura{img3.png}
 \end{respuesta}
 
-% ----------------------------------------------------------------------------
-% BLOQUE 4: PRUEBAS REALIZADAS
-% ----------------------------------------------------------------------------
 \begin{ejercicio}{4.- Pruebas realizadas y análisis de rendimiento}
 \end{ejercicio}
 
@@ -145,8 +136,9 @@ Desarrollar e implementar un visualizador interactivo y animado de fractales apl
         \item La estructura del algoritmo permite dividir en más de dos ramas independientes.  
         \item El número de hilos no excede el paralelismo intrínseco del problema. 
     \end{enumerate}
-    En los casos donde el trabajo útil por tarea es minúsculo, el \textit{overhead} de Rayon domina y el paralelo empata o pierde frente al secuencial en la medición aislada — aunque en la animación en vivo la fluidez sigue siendo mejor gracias a la amortización entre cuadros.
+    En los casos donde el trabajo útil por tarea es minúsculo, el \textit{overhead} de Rayon domina y el paralelo empata o pierde frente al secuencial en la medición aislada, aunque en la animación en vivo la fluidez sigue siendo mejor gracias a la amortización entre cuadros.
     \captura{img5.png}
+    \captura{img6.png}
 \end{respuesta}
 
 \section*{CONCLUSIÓN}

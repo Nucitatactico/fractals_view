@@ -9,9 +9,7 @@ use rayon::prelude::*;
 const PASO_MUNDO: f32 = 4.0;
 const ORIGEN: Vec2 = Vec2::new(-100.0, 50.0);
 
-/// Dirección del segmento `k` en forma cerrada: el rumbo (en múltiplos de 90°)
-/// es el número de unos del código Gray de k. Por eso, en paralelo, cada bloque puede
-/// calcularse sin conocer los anteriores.
+/// Dirección del segmento `k` en forma cerrada: el rumbo (en múltiplos de 90° -> cod gay)
 fn direccion(k: usize) -> Vec2 {
     match (k ^ (k >> 1)).count_ones() % 4 {
         0 => egui::vec2(0.0, -PASO_MUNDO),

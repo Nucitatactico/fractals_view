@@ -89,8 +89,7 @@ impl Escena {
         });
     }
 
-    /// Procesa pan y zoom y detecta si cambió la profundidad o el modo.
-    /// Devuelve `true` si hay que (re)generar la geometría; en ese caso reinicia la animación.
+    /// Procesa si cambió la profundidad o el modo
     pub fn preparar(&mut self, ui: &mut egui::Ui, rect: egui::Rect, paralelo: bool) -> bool {
         self.camara.interactuar(ui, rect);
         let cambio = self.firma.cambiada((self.profundidad, paralelo));
@@ -100,7 +99,7 @@ impl Escena {
         cambio
     }
 
-    /// Cuántos elementos (de `total`) se deben mostrar ahora.
+    /// Cuántos elementos se deben mostrar
     pub fn avance(&mut self, ui: &egui::Ui, total: usize) -> usize {
         self.anim.progreso(ui, total)
     }
